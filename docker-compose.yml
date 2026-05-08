@@ -8,8 +8,12 @@ services:
       - "8000:8000"
     volumes:
       - ./backend:/app
-    env_file:
-      - ./backend/.env
+    environment:
+      APP_ENV: local
+      API_PREFIX: /api/v1
+      DATABASE_URL: postgresql+asyncpg://quizbattle:quizbattle@postgres:5432/quizbattle_db
+      REDIS_URL: redis://redis:6379/0
+      JWT_SECRET: change_me
 
   frontend:
     build: ./frontend

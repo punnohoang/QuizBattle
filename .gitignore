@@ -9,6 +9,7 @@ coverage/
 dist/
 build/
 .python-version
+environment.yml
 .venv/
 .env
 .env.*
@@ -21,9 +22,6 @@ node_modules/
 .turbo/
 out/
 *.log
-pnpm-lock.yaml
-yarn.lock
-package-lock.json
 
 # Docker
 postgres_data/

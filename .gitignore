@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage/
+dist/
+build/
+.python-version
+.venv/
+.env
+.env.*
+venv/
+pip-wheel-metadata/
+*.egg-info/
+# Node
+node_modules/
+.next/
+.turbo/
+out/
+*.log
+pnpm-lock.yaml
+yarn.lock
+package-lock.json
+
+# Docker
+postgres_data/
+
+# IDE
+.vscode/
+.idea/
+
+# Editor swap/backup
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db

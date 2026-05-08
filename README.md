@@ -56,4 +56,4 @@ App will be at http://localhost:3000
 ## Run
 
 ```bash
-docker-compose up --build
+docker compose up --build

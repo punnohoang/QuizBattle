@@ -38,3 +38,8 @@ postgres_data/
 # OS
 .DS_Store
 Thumbs.db
+
+
+# MD
+API_REGISTER.md
+API_LOGIN_REFRESH_LOGOUT.md

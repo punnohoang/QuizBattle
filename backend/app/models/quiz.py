@@ -93,15 +93,17 @@ class Question(Base):
         Text,
         nullable=False
     )
+    # type - mean the question type (multiple_choice | true_false)
     type: Mapped[str] = mapped_column(
         String(50),
         nullable=False,
         default="multiple_choice"
     )
+    # score_type - mean the score multiple for this question can be (normal | double)
     score_type: Mapped[str] = mapped_column(
         String(50),
         nullable=False,
-        default="equal"
+        default="normal"
     )
     time_limit: Mapped[int | None] = mapped_column(
         Integer,

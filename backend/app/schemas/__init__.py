@@ -7,6 +7,15 @@ from .auth import (
     TokenResponse,
     UserResponse,
 )
+from .quiz import (
+    QuizCreate,
+    QuizUpdate,
+    QuizResponse,
+    QuizDetailResponse,
+    QuestionCreate,
+    QuestionUpdate,
+    QuestionResponse,
+)
 
 __all__ = [
     "LoginRequest",
@@ -14,4 +23,11 @@ __all__ = [
     "RegisterRequest",
     "TokenResponse",
     "UserResponse",
+    "QuizCreate",
+    "QuizUpdate",
+    "QuizResponse",
+    "QuizDetailResponse",
+    "QuestionCreate",
+    "QuestionUpdate",
+    "QuestionResponse",
 ]

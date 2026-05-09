@@ -1,17 +1,22 @@
 from typing import Annotated
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, Header, Cookie, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_db
 from ..models import User
 from .security import verify_token
+from .cache import get_redis, get_token_blacklist_key
+from redis.asyncio import Redis
 
 
 async def get_current_user(
-    authorization: str | None = None,
+    authorization: str | None = Header(default=None),
+    access_token: str | None = Cookie(default=None),
+    refresh_token: str | None = Cookie(default=None),
     db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis),
 ) -> User:
     """
     Dependency to extract and verify JWT access token from Authorization header.
@@ -21,37 +26,62 @@ async def get_current_user(
         HTTPException 401: If token is missing, invalid, or expired
         HTTPException 404: If user not found
     """
-    # Check Authorization header
-    if not authorization:
+    token = None
+
+    # Prefer Authorization header
+    if authorization:
+        try:
+            scheme, token_value = authorization.split(" ")
+            if scheme.lower() != "bearer":
+                raise ValueError("Invalid authentication scheme")
+            token = token_value
+            token_payload = verify_token(token, token_type="access")
+            if not token_payload:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid or expired access token",
+                    headers={"WWW-Authenticate": "Bearer"},
+                )
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid Authorization header format. Use 'Bearer {token}'",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+    # Fallback to access_token cookie
+    elif access_token:
+        token_payload = verify_token(access_token, token_type="access")
+        if not token_payload:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired access token",
+                headers={"WWW-Authenticate": "Bearer"},
+            )
+    # If only refresh_token cookie present, validate it (and check blacklist)
+    elif refresh_token:
+        # Check blacklist in Redis
+        blacklisted = await redis.get(get_token_blacklist_key(refresh_token))
+        if blacklisted:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Refresh token revoked",
+            )
+
+        token_payload = verify_token(refresh_token, token_type="refresh")
+        if not token_payload:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="Invalid or expired refresh token",
+            )
+    else:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing Authorization header",
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Extract token from "Bearer {token}"
-    try:
-        scheme, token = authorization.split(" ")
-        if scheme.lower() != "bearer":
-            raise ValueError("Invalid authentication scheme")
-    except ValueError:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid Authorization header format. Use 'Bearer {token}'",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
-    # Verify token
-    token_payload = verify_token(token, token_type="access")
-    if not token_payload:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Invalid or expired access token",
-            headers={"WWW-Authenticate": "Bearer"},
-        )
-
     # Get user from database
-    result = await db.execute(select(User).where(User.id == token_payload.sub))
+    result = await db.execute(select(User).where(User.id == int(token_payload.sub)))
     user = result.scalar_one_or_none()
     if not user:
         raise HTTPException(

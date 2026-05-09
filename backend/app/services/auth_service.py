@@ -62,7 +62,7 @@ class AuthService:
         token_payload = self._verify_refresh_token(refresh_token)
         await self._check_token_not_blacklisted(refresh_token)
 
-        user = await self._get_user_by_id(token_payload.sub)
+        user = await self._get_user_by_id(int(token_payload.sub))
         new_tokens = await self.generate_tokens(user.id)
 
         return user, new_tokens
@@ -75,7 +75,7 @@ class AuthService:
         # Store in database for persistence
         token_entry = RefreshToken(
             token=refresh_token,
-            user_id=token_payload.sub,
+            user_id=int(token_payload.sub),
             expires_at=token_payload.exp,
         )
         self.db.add(token_entry)

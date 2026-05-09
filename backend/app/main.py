@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .auth import router as auth_router
 from .db import init_db
+from .dependencies import CurrentUser
 from .utils.redis import RedisClient
 from . import models
 
@@ -35,3 +36,17 @@ app.include_router(auth_router)
 @app.get("/")
 async def root():
     return {"message": "QuizBattle API Running"}
+
+
+# Protected endpoint example
+@app.get("/api/v1/me")
+async def get_current_user_info(current_user: CurrentUser):
+    """Get current authenticated user information."""
+    return {
+        "id": current_user.id,
+        "username": current_user.username,
+        "email": current_user.email,
+        "avatar_url": current_user.avatar_url,
+        "is_active": current_user.is_active,
+        "created_at": current_user.created_at,
+    }

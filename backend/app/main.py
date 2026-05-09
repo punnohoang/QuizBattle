@@ -1,11 +1,11 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from .auth import router as auth_router
-from .db import init_db
-from .dependencies import CurrentUser
-from .utils.redis import RedisClient
-from . import models
+from app.api.router import api_router
+from app.core.cache import RedisClient
+from app.core.dependencies import CurrentUser
+from app.db import init_db
+from app.models import Base
 
 app = FastAPI(title="QuizBattle API")
 
@@ -30,7 +30,7 @@ async def on_shutdown() -> None:
     await RedisClient.close()
 
 
-app.include_router(auth_router)
+app.include_router(api_router)
 
 
 @app.get("/")

@@ -4,9 +4,9 @@ from fastapi import Depends, HTTPException, status
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from .db import get_db
-from .models import User
-from .utils.tokens import verify_token
+from ..db import get_db
+from ..models import User
+from .security import verify_token
 
 
 async def get_current_user(

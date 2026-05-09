@@ -3,12 +3,13 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.cache import get_redis
+from app.core.dependencies import CurrentUser
 from app.core.security import REFRESH_TOKEN_EXPIRE_DAYS
 from app.db import get_db
 from app.schemas.auth import LoginRequest, RefreshRequest, RegisterRequest, TokenResponse, UserResponse
 from app.services.auth_service import AuthService
 
-router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
+router = APIRouter(prefix="/auth", tags=["auth"])
 
 
 @router.post("/register", status_code=status.HTTP_201_CREATED, response_model=UserResponse)
@@ -83,3 +84,16 @@ async def logout(
 
     auth_service = AuthService(db, redis)
     await auth_service.logout_user(refresh_token)
+
+
+@router.get("/me", response_model=UserResponse)
+async def get_current_user_info(current_user: CurrentUser):
+    """Get current authenticated user information."""
+    return {
+        "id": current_user.id,
+        "username": current_user.username,
+        "email": current_user.email,
+        "avatar_url": current_user.avatar_url,
+        "is_active": current_user.is_active,
+        "created_at": current_user.created_at,
+    }

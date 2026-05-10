@@ -9,11 +9,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.models import GameSession, Quiz
 from app.schemas.room import RoomCreateRequest
+from app.core.redis_keys import (
+    ROOM_CODE_KEY_PREFIX,
+    ROOM_STATE_KEY_TEMPLATE,
+    get_room_state_key,
+)
+from app.core.redis_ops import RoomRedisManager
+
 
 ROOM_CODE_LENGTH = 6
 ROOM_STATE_WAITING = "WAITING"
-ROOM_CODE_KEY_PREFIX = "room_code:"
-ROOM_STATE_KEY_TEMPLATE = "quiz-room:{id}:state"
 MAX_CODE_GENERATION_ATTEMPTS = 10
 
 
@@ -48,7 +53,8 @@ class RoomService:
             )
 
         try:
-            await self.redis.set(ROOM_STATE_KEY_TEMPLATE.format(id=session.id), ROOM_STATE_WAITING)
+            redis_ops = RoomRedisManager(self.redis)
+            await redis_ops.set_room_state(session.id, False)
             await self.redis.set(room_code_key, session.id)
         except Exception as exc:
             await self.db.delete(session)

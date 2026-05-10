@@ -7,7 +7,7 @@ from pydantic import BaseModel
 
 
 class TokenPayload(BaseModel):
-    sub: int  # user_id
+    sub: str  # user_id
     type: str  # "access" or "refresh"
     exp: datetime
     iat: datetime
@@ -24,7 +24,7 @@ def create_access_token(user_id: int) -> str:
     expires = now + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
 
     payload = {
-        "sub": user_id,
+        "sub": str(user_id),
         "type": "access",
         "exp": expires,
         "iat": now,
@@ -38,7 +38,7 @@ def create_refresh_token(user_id: int) -> str:
     expires = now + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
 
     payload = {
-        "sub": user_id,
+        "sub": str(user_id),
         "type": "refresh",
         "exp": expires,
         "iat": now,

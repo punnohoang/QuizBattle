@@ -4,7 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.cache import get_redis
 from app.core.dependencies import CurrentUser
-from app.core.security import REFRESH_TOKEN_EXPIRE_DAYS
+from app.core.security import REFRESH_TOKEN_EXPIRE_DAYS, ACCESS_TOKEN_EXPIRE_MINUTES
 from app.db import get_db
 from app.schemas.auth import LoginRequest, RefreshRequest, RegisterRequest, TokenResponse, UserResponse
 from app.services.auth_service import AuthService
@@ -43,6 +43,16 @@ async def login(
         secure=True,
         samesite="strict",
         max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600,
+    )
+
+    # Also set access token in HttpOnly cookie for cookie-based auth flows
+    response.set_cookie(
+        key="access_token",
+        value=tokens.access_token,
+        httponly=True,
+        secure=True,
+        samesite="strict",
+        max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
     )
 
     return tokens

@@ -16,6 +16,7 @@ from .quiz import (
     QuestionUpdate,
     QuestionResponse,
 )
+from .room import RoomCreateRequest, RoomResponse
 
 __all__ = [
     "LoginRequest",
@@ -30,4 +31,6 @@ __all__ = [
     "QuestionCreate",
     "QuestionUpdate",
     "QuestionResponse",
+    "RoomCreateRequest",
+    "RoomResponse",
 ]

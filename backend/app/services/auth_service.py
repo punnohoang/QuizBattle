@@ -76,7 +76,7 @@ class AuthService:
         token_entry = RefreshToken(
             token=refresh_token,
             user_id=int(token_payload.sub),
-            expires_at=token_payload.exp,
+            expires_at=token_payload.exp.replace(tzinfo=None),
         )
         self.db.add(token_entry)
         await self.db.commit()

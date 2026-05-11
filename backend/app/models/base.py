@@ -1,5 +1,6 @@
 """Base models and common functionality."""
 from datetime import datetime
+from enum import Enum
 from typing import Any
 
 from sqlalchemy import DateTime, Integer, func
@@ -52,10 +53,10 @@ class ModelConstants:
     IP_ADDRESS_MAX_LENGTH = 50
 
     # Question types
-    QUESTION_TYPES = ["multiple_choice", "short_answer", "true_false"]
+    QUESTION_TYPES = ["MTC", "TF"]
 
     # Score types
-    SCORE_TYPES = ["equal", "weighted"]
+    SCORE_TYPES = ["normal", "double"]
 
     # Game session statuses
     GAME_STATUSES = ["waiting", "in_progress", "finished", "cancelled"]
@@ -67,3 +68,17 @@ class ModelConstants:
     DEFAULT_IS_ACTIVE = True
     DEFAULT_IS_DELETED = False
     DEFAULT_IS_CORRECT = False
+
+
+class QuestionType(str, Enum):
+    """Supported question types."""
+
+    MTC = "MTC"
+    TF = "TF"
+
+
+class ScoreType(str, Enum):
+    """Supported score multipliers for questions."""
+
+    normal = "normal"
+    double = "double"

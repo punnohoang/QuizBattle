@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState, useCallback, use } from "react";
+import type { FormEvent } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import Navbar from "../../../components/Navbar";
@@ -8,13 +9,24 @@ import AuthGuard from "../../../components/AuthGuard";
 import { quizApi, roomApi } from "../../../../lib/api";
 import type { QuizDetailResponse, QuestionResponse, QuestionCreate, RoomResponse } from "../../../../lib/types";
 
-const OPT_LABELS = ["A", "B", "C", "D"];
+const OPT_LABELS = ["A", "B", "C", "D", "E", "F", "G", "H", "I", "J", "K", "L", "M", "N", "O", "P", "Q", "R", "S", "T", "U", "V", "W", "X", "Y", "Z"];
 const OPT_COLORS = [
   { bg: "#dbeafe", border: "#93c5fd", dot: "#2563eb" },
   { bg: "#d1fae5", border: "#6ee7b7", dot: "#059669" },
   { bg: "#fef3c7", border: "#fcd34d", dot: "#d97706" },
   { bg: "#fee2e2", border: "#fca5a5", dot: "#dc2626" },
+  { bg: "#f3e8ff", border: "#d8b4fe", dot: "#a855f7" },
+  { bg: "#fce7f3", border: "#fbcfe8", dot: "#ec4899" },
+  { bg: "#f0fdfa", border: "#99f6e4", dot: "#14b8a6" },
+  { bg: "#fefce8", border: "#facc15", dot: "#ca8a04" },
+  { bg: "#ecfdf5", border: "#86efac", dot: "#22c55e" },
+  { bg: "#eff6ff", border: "#7dd3fc", dot: "#0284c7" },
 ];
+
+const getOptionColor = (index: number) => {
+  const colors = OPT_COLORS;
+  return colors[index % colors.length];
+};
 
 export default function EditQuizPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
@@ -25,8 +37,17 @@ export default function EditQuizPage({ params }: { params: Promise<{ id: string 
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [hostingId, setHostingId] = useState<number | null>(null);
+  const [showEditQuizModal, setShowEditQuizModal] = useState(false);
+  const [savingQuiz, setSavingQuiz] = useState(false);
+  const [quizForm, setQuizForm] = useState({
+    title: "",
+    description: "",
+    category: "",
+  });
 
   const [showAddModal, setShowAddModal] = useState(false);
+  const [editingQuestionId, setEditingQuestionId] = useState<number | null>(null);
+  const [hoveredQuestionId, setHoveredQuestionId] = useState<number | null>(null);
   const [newQuestion, setNewQuestion] = useState<QuestionCreate>({
     content: "",
     type: "multiple_choice",
@@ -35,12 +56,88 @@ export default function EditQuizPage({ params }: { params: Promise<{ id: string 
     order_index: 0,
     options: [
       { content: "", is_correct: true,  order_index: 0 },
-      { content: "", is_correct: false, order_index: 1 },
-      { content: "", is_correct: false, order_index: 2 },
-      { content: "", is_correct: false, order_index: 3 },
     ],
   });
   const [savingQuestion, setSavingQuestion] = useState(false);
+
+  const createQuestionDraft = (questionType: "multiple_choice" | "true_false") => {
+    if (questionType === "true_false") {
+      return {
+        content: "",
+        type: "true_false",
+        score_type: "normal",
+        time_limit: 20,
+        order_index: 0,
+        options: [
+          { content: "True", is_correct: true,  order_index: 0 },
+          { content: "False", is_correct: false, order_index: 1 },
+        ],
+      };
+    }
+
+    return {
+      content: "",
+      type: "multiple_choice",
+      score_type: "normal",
+      time_limit: 20,
+      order_index: 0,
+      options: [
+        { content: "", is_correct: true,  order_index: 0 },
+      ],
+    };
+  };
+
+  const openNewQuestionModal = (questionType: "multiple_choice" | "true_false" = "multiple_choice") => {
+    setEditingQuestionId(null);
+    setNewQuestion(createQuestionDraft(questionType));
+    setShowAddModal(true);
+  };
+
+  const openEditQuestionModal = (question: QuestionResponse) => {
+    const questionType = question.type === "TF" || question.type === "true_false"
+      ? "true_false"
+      : "multiple_choice";
+    setEditingQuestionId(question.id);
+    setNewQuestion({
+      content: question.content,
+      type: questionType,
+      score_type: question.score_type as "normal" | "double",
+      time_limit: question.time_limit,
+      order_index: question.order_index,
+      options: question.options.map((option, index) => ({
+        content: option.content,
+        is_correct: option.is_correct,
+        order_index: index,
+      })),
+    });
+    setShowAddModal(true);
+  };
+
+  const closeQuestionModal = () => {
+    setShowAddModal(false);
+    setEditingQuestionId(null);
+    setNewQuestion(createQuestionDraft("multiple_choice"));
+  };
+
+  const setQuestionType = (questionType: "multiple_choice" | "true_false") => {
+    setNewQuestion((current) => {
+      const nextOptions =
+        questionType === "true_false"
+          ? [
+              { content: "True", is_correct: true, order_index: 0 },
+              { content: "False", is_correct: false, order_index: 1 },
+            ]
+          : [
+              { content: "", is_correct: true, order_index: 0 },
+            ];
+
+      return {
+        ...current,
+        type: questionType,
+        options: nextOptions,
+      };
+    });
+  };
 
   const loadQuiz = useCallback(async () => {
     try {
@@ -54,6 +151,34 @@ export default function EditQuizPage({ params }: { params: Promise<{ id: string 
   }, [quizId]);
 
   useEffect(() => { loadQuiz(); }, [loadQuiz]);
+
+  const openEditQuizModal = () => {
+    if (!quiz) return;
+    setQuizForm({
+      title: quiz.title,
+      description: quiz.description ?? "",
+      category: quiz.category,
+    });
+    setShowEditQuizModal(true);
+  };
+
+  const handleSaveQuiz = async (e: FormEvent) => {
+    e.preventDefault();
+    setSavingQuiz(true);
+    try {
+      await quizApi.update(quizId, {
+        title: quizForm.title.trim(),
+        description: quizForm.description.trim() || undefined,
+        category: quizForm.category.trim(),
+      });
+      setShowEditQuizModal(false);
+      loadQuiz();
+    } catch {
+      alert("Failed to update quiz. Make sure all fields are filled.");
+    } finally {
+      setSavingQuiz(false);
+    }
+  };
 
   const handleHost = async () => {
     if (quiz?.questions.length === 0) {
@@ -81,25 +206,20 @@ export default function EditQuizPage({ params }: { params: Promise<{ id: string 
     }
   };
 
-  const handleSaveQuestion = async (e: React.FormEvent) => {
+  const handleSaveQuestion = async (e: FormEvent) => {
     e.preventDefault();
     setSavingQuestion(true);
     try {
       const payload = {
         ...newQuestion,
-        order_index: quiz?.questions.length || 0,
+        order_index: editingQuestionId !== null ? newQuestion.order_index : (quiz?.questions.length || 0),
       };
-      await quizApi.createQuestion(quizId, payload);
-      setShowAddModal(false);
-      setNewQuestion({
-        content: "", type: "multiple_choice", score_type: "normal", time_limit: 20, order_index: 0,
-        options: [
-          { content: "", is_correct: true,  order_index: 0 },
-          { content: "", is_correct: false, order_index: 1 },
-          { content: "", is_correct: false, order_index: 2 },
-          { content: "", is_correct: false, order_index: 3 },
-        ],
-      });
+      if (editingQuestionId !== null) {
+        await quizApi.updateQuestion(quizId, editingQuestionId, payload);
+      } else {
+        await quizApi.createQuestion(quizId, payload);
+      }
+      closeQuestionModal();
       loadQuiz();
     } catch {
       alert("Failed to save question. Make sure all fields are filled.");
@@ -111,10 +231,30 @@ export default function EditQuizPage({ params }: { params: Promise<{ id: string 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const updateOption = (idx: number, field: string, val: any) => {
     const newOpts = [...newQuestion.options];
-    if (field === "is_correct" && newQuestion.type === "multiple_choice") {
+    if (field === "is_correct" && val === true) {
+      // Reset all options to false first, then set the selected one to true
       newOpts.forEach(o => (o.is_correct = false));
     }
     newOpts[idx] = { ...newOpts[idx], [field]: val };
+    setNewQuestion({ ...newQuestion, options: newOpts });
+  };
+
+  const addOption = () => {
+    if (newQuestion.type !== "multiple_choice") return;
+    const newOpts = [...newQuestion.options];
+    newOpts.push({
+      content: "",
+      is_correct: false,
+      order_index: newOpts.length,
+    });
+    setNewQuestion({ ...newQuestion, options: newOpts });
+  };
+
+  const removeOption = (idx: number) => {
+    if (newQuestion.type !== "multiple_choice" || newQuestion.options.length <= 1) return;
+    const newOpts = newQuestion.options
+      .filter((_, i) => i !== idx)
+      .map((option, index) => ({ ...option, order_index: index }));
     setNewQuestion({ ...newQuestion, options: newOpts });
   };
 
@@ -160,16 +300,45 @@ export default function EditQuizPage({ params }: { params: Promise<{ id: string 
                   borderLeft: "4px solid var(--primary)",
                 }}
               >
-                <div>
+                <div
+                  role="button"
+                  tabIndex={0}
+                  onClick={openEditQuizModal}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      openEditQuizModal();
+                    }
+                  }}
+                  style={{
+                    cursor: "pointer",
+                    padding: "8px 10px",
+                    margin: "-8px -10px",
+                    borderRadius: 12,
+                    transition: "transform 0.15s ease, background 0.15s ease, box-shadow 0.15s ease",
+                  }}
+                  onMouseEnter={(event) => {
+                    event.currentTarget.style.background = "var(--surface-alt)";
+                    event.currentTarget.style.transform = "translateY(-1px)";
+                    event.currentTarget.style.boxShadow = "0 10px 24px rgba(15, 23, 42, 0.08)";
+                  }}
+                  onMouseLeave={(event) => {
+                    event.currentTarget.style.background = "transparent";
+                    event.currentTarget.style.transform = "translateY(0)";
+                    event.currentTarget.style.boxShadow = "none";
+                  }}
+                >
                   <div style={{ marginBottom: 8 }}>
                     <span className="badge">{quiz.category}</span>
                     {quiz.questions.length === 0 && (
                       <span className="badge badge-warning" style={{ marginLeft: 8 }}>No questions</span>
                     )}
                   </div>
-                  <h1 style={{ fontSize: "1.5rem", fontWeight: 800, marginBottom: 4, color: "var(--text-primary)" }}>
-                    {quiz.title}
-                  </h1>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
+                    <h1 style={{ fontSize: "1.5rem", fontWeight: 800, marginBottom: 4, color: "var(--text-primary)" }}>
+                      {quiz.title}
+                    </h1>
+                  </div>
                   {quiz.description && (
                     <p style={{ color: "var(--text-secondary)", fontSize: "0.9rem", marginBottom: 0 }}>
                       {quiz.description}
@@ -178,7 +347,7 @@ export default function EditQuizPage({ params }: { params: Promise<{ id: string 
                 </div>
                 <div style={{ display: "flex", gap: 10 }}>
                   <button
-                    onClick={() => setShowAddModal(true)}
+                    onClick={() => openNewQuestionModal("multiple_choice")}
                     className="btn btn-secondary"
                   >
                     + Add Question
@@ -224,7 +393,7 @@ export default function EditQuizPage({ params }: { params: Promise<{ id: string 
                       Add your first question to get started
                     </p>
                     <button
-                      onClick={() => setShowAddModal(true)}
+                      onClick={() => openNewQuestionModal("multiple_choice")}
                       className="btn btn-primary btn-sm"
                     >
                       + Add First Question
@@ -236,7 +405,25 @@ export default function EditQuizPage({ params }: { params: Promise<{ id: string 
                       <div
                         key={q.id}
                         className="card animate-fadeIn"
-                        style={{ padding: "1.25rem 1.5rem" }}
+                        role="button"
+                        tabIndex={0}
+                        onClick={() => openEditQuestionModal(q)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" || event.key === " ") {
+                            event.preventDefault();
+                            openEditQuestionModal(q);
+                          }
+                        }}
+                        onMouseEnter={() => setHoveredQuestionId(q.id)}
+                        onMouseLeave={() => setHoveredQuestionId((current) => (current === q.id ? null : current))}
+                        style={{
+                          padding: "1.25rem 1.5rem",
+                          cursor: "pointer",
+                          transition: "transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease",
+                          transform: hoveredQuestionId === q.id ? "translateY(-2px)" : "translateY(0)",
+                          boxShadow: hoveredQuestionId === q.id ? "0 18px 40px rgba(15, 23, 42, 0.12)" : undefined,
+                          borderColor: hoveredQuestionId === q.id ? "var(--primary)" : undefined,
+                        }}
                       >
                         <div style={{ display: "flex", gap: 16, alignItems: "flex-start" }}>
                           {/* Number circle */}
@@ -313,11 +500,11 @@ export default function EditQuizPage({ params }: { params: Promise<{ id: string 
                                   <span
                                     style={{
                                       width: 22, height: 22, borderRadius: 6,
-                                      background: OPT_COLORS[oi]?.bg || "#f3f4f6",
-                                      border: `1.5px solid ${OPT_COLORS[oi]?.border || "#e5e7eb"}`,
+                                      background: getOptionColor(oi).bg,
+                                      border: `1.5px solid ${getOptionColor(oi).border}`,
                                       display: "flex", alignItems: "center", justifyContent: "center",
                                       fontWeight: 700, fontSize: "0.7rem",
-                                      color: OPT_COLORS[oi]?.dot || "#374151",
+                                      color: getOptionColor(oi).dot,
                                       flexShrink: 0,
                                     }}
                                   >
@@ -341,7 +528,10 @@ export default function EditQuizPage({ params }: { params: Promise<{ id: string 
 
                           {/* Delete button */}
                           <button
-                            onClick={() => handleDeleteQuestion(q.id)}
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              handleDeleteQuestion(q.id);
+                            }}
                             className="btn btn-sm"
                             style={{
                               background: "var(--danger-light)",
@@ -362,6 +552,109 @@ export default function EditQuizPage({ params }: { params: Promise<{ id: string 
           )}
         </div>
 
+        {/* Edit Quiz Modal */}
+        {showEditQuizModal && (
+          <div
+            style={{
+              position: "fixed", inset: 0, zIndex: 200,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              padding: 16,
+            }}
+          >
+            <div
+              style={{
+                position: "absolute", inset: 0,
+                background: "rgba(17,24,39,0.45)",
+                backdropFilter: "blur(4px)",
+              }}
+              onClick={() => setShowEditQuizModal(false)}
+            />
+
+            <div
+              className="card animate-slideInUp"
+              style={{
+                position: "relative", width: "100%", maxWidth: 560,
+                padding: "2rem", zIndex: 1,
+              }}
+            >
+              <div
+                style={{
+                  display: "flex", alignItems: "center",
+                  justifyContent: "space-between", marginBottom: 24,
+                }}
+              >
+                <h2 style={{ fontSize: "1.3rem", fontWeight: 800, marginBottom: 0, color: "var(--text-primary)" }}>
+                  Edit Quiz
+                </h2>
+                <button
+                  onClick={() => setShowEditQuizModal(false)}
+                  className="btn btn-ghost btn-sm"
+                  style={{ padding: "6px 10px", fontSize: "1.1rem" }}
+                >
+                  ✕
+                </button>
+              </div>
+
+              <form onSubmit={handleSaveQuiz} style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+                <div className="form-group">
+                  <label htmlFor="quizTitle">Quiz Title *</label>
+                  <input
+                    id="quizTitle"
+                    type="text"
+                    required
+                    value={quizForm.title}
+                    onChange={(e) => setQuizForm({ ...quizForm, title: e.target.value })}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="quizDescription">Description</label>
+                  <textarea
+                    id="quizDescription"
+                    rows={3}
+                    value={quizForm.description}
+                    onChange={(e) => setQuizForm({ ...quizForm, description: e.target.value })}
+                  />
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="quizCategory">Category *</label>
+                  <input
+                    id="quizCategory"
+                    type="text"
+                    required
+                    value={quizForm.category}
+                    onChange={(e) => setQuizForm({ ...quizForm, category: e.target.value })}
+                  />
+                </div>
+
+                <div style={{ display: "flex", gap: 12, marginTop: 8 }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowEditQuizModal(false)}
+                    className="btn btn-secondary"
+                    style={{ flex: 1 }}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="btn btn-primary"
+                    disabled={savingQuiz}
+                    style={{ flex: 2 }}
+                  >
+                    {savingQuiz ? (
+                      <><div className="spinner spinner-sm" /> Saving...</>
+                    ) : (
+                      "Save Changes"
+                    )}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
         {/* Add Question Modal */}
         {showAddModal && (
           <div
@@ -378,7 +671,7 @@ export default function EditQuizPage({ params }: { params: Promise<{ id: string 
                 background: "rgba(17,24,39,0.45)",
                 backdropFilter: "blur(4px)",
               }}
-              onClick={() => setShowAddModal(false)}
+              onClick={closeQuestionModal}
             />
 
             {/* Modal */}
@@ -398,10 +691,10 @@ export default function EditQuizPage({ params }: { params: Promise<{ id: string 
                 }}
               >
                 <h2 style={{ fontSize: "1.3rem", fontWeight: 800, marginBottom: 0, color: "var(--text-primary)" }}>
-                  Add Question
+                  {editingQuestionId !== null ? "Edit Question" : "Add Question"}
                 </h2>
                 <button
-                  onClick={() => setShowAddModal(false)}
+                  onClick={closeQuestionModal}
                   className="btn btn-ghost btn-sm"
                   style={{ padding: "6px 10px", fontSize: "1.1rem" }}
                 >
@@ -410,6 +703,47 @@ export default function EditQuizPage({ params }: { params: Promise<{ id: string 
               </div>
 
               <form onSubmit={handleSaveQuestion} style={{ display: "flex", flexDirection: "column", gap: 20 }}>
+                {/* Question Type Selector */}
+                <div>
+                  <label
+                    style={{
+                      display: "block", fontWeight: 600,
+                      fontSize: "0.875rem", marginBottom: 12,
+                      color: "var(--text-primary)",
+                    }}
+                  >
+                    Question Type *
+                  </label>
+                  <div style={{ display: "flex", gap: 12 }}>
+                    <button
+                      type="button"
+                      onClick={() => setQuestionType("multiple_choice")}
+                      style={{
+                        flex: 1, padding: "12px 16px", borderRadius: 8,
+                        border: `2px solid ${newQuestion.type === "multiple_choice" ? "var(--primary)" : "var(--border)"}`,
+                        background: newQuestion.type === "multiple_choice" ? "var(--primary-muted)" : "var(--surface-alt)",
+                        color: newQuestion.type === "multiple_choice" ? "var(--primary)" : "var(--text-secondary)",
+                        fontWeight: 600, cursor: "pointer", transition: "all 0.15s",
+                      }}
+                    >
+                      📋 Multiple Choice
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setQuestionType("true_false")}
+                      style={{
+                        flex: 1, padding: "12px 16px", borderRadius: 8,
+                        border: `2px solid ${newQuestion.type === "true_false" ? "var(--primary)" : "var(--border)"}`,
+                        background: newQuestion.type === "true_false" ? "var(--primary-muted)" : "var(--surface-alt)",
+                        color: newQuestion.type === "true_false" ? "var(--primary)" : "var(--text-secondary)",
+                        fontWeight: 600, cursor: "pointer", transition: "all 0.15s",
+                      }}
+                    >
+                      ✓❌ True/False
+                    </button>
+                  </div>
+                </div>
+
                 {/* Question text */}
                 <div className="form-group">
                   <label htmlFor="qContent">Question Text *</label>
@@ -460,14 +794,26 @@ export default function EditQuizPage({ params }: { params: Promise<{ id: string 
                     }}
                   >
                     Answer Options *
-                    <span
-                      style={{
-                        marginLeft: 8, fontSize: "0.78rem",
-                        color: "var(--text-muted)", fontWeight: 400,
-                      }}
-                    >
-                      (select the correct answer)
-                    </span>
+                    {newQuestion.type === "multiple_choice" && (
+                      <span
+                        style={{
+                          marginLeft: 8, fontSize: "0.78rem",
+                          color: "var(--text-muted)", fontWeight: 400,
+                        }}
+                      >
+                        (select the correct answer)
+                      </span>
+                    )}
+                    {newQuestion.type === "true_false" && (
+                      <span
+                        style={{
+                          marginLeft: 8, fontSize: "0.78rem",
+                          color: "var(--text-muted)", fontWeight: 400,
+                        }}
+                      >
+                        (mark the correct answer)
+                      </span>
+                    )}
                   </label>
                   <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                     {newQuestion.options.map((opt, i) => (
@@ -497,11 +843,11 @@ export default function EditQuizPage({ params }: { params: Promise<{ id: string 
                         <span
                           style={{
                             width: 26, height: 26, borderRadius: 6,
-                            background: OPT_COLORS[i]?.bg || "#f3f4f6",
-                            border: `1.5px solid ${OPT_COLORS[i]?.border || "#e5e7eb"}`,
+                            background: getOptionColor(i).bg,
+                            border: `1.5px solid ${getOptionColor(i).border}`,
                             display: "flex", alignItems: "center", justifyContent: "center",
                             fontWeight: 700, fontSize: "0.75rem",
-                            color: OPT_COLORS[i]?.dot || "#374151",
+                            color: getOptionColor(i).dot,
                             flexShrink: 0,
                           }}
                         >
@@ -512,12 +858,15 @@ export default function EditQuizPage({ params }: { params: Promise<{ id: string 
                           type="text"
                           placeholder={`Option ${i + 1}`}
                           required
+                          disabled={newQuestion.type === "true_false"}
                           value={opt.content}
                           onChange={e => updateOption(i, "content", e.target.value)}
                           style={{
                             flex: 1, border: "none", background: "transparent",
                             outline: "none", fontSize: "0.9rem",
                             color: "var(--text-primary)", padding: 0,
+                            cursor: newQuestion.type === "true_false" ? "not-allowed" : "text",
+                            opacity: newQuestion.type === "true_false" ? 0.6 : 1,
                           }}
                         />
                         {opt.is_correct && (
@@ -525,16 +874,51 @@ export default function EditQuizPage({ params }: { params: Promise<{ id: string 
                             ✓ Correct
                           </span>
                         )}
+                        {/* Delete button for MTC options */}
+                        {newQuestion.type === "multiple_choice" && newQuestion.options.length > 1 && (
+                          <button
+                            type="button"
+                            onClick={() => removeOption(i)}
+                            style={{
+                              background: "var(--danger-light)",
+                              color: "var(--danger)",
+                              border: "1px solid #fca5a5",
+                              padding: "4px 8px", borderRadius: 6,
+                              cursor: "pointer", fontSize: "0.75rem",
+                              fontWeight: 600,
+                            }}
+                          >
+                            ✕
+                          </button>
+                        )}
                       </div>
                     ))}
                   </div>
+
+                  {/* Add option button for MTC */}
+                  {newQuestion.type === "multiple_choice" && (
+                    <button
+                      type="button"
+                      onClick={addOption}
+                      style={{
+                        marginTop: 10, padding: "10px 16px", borderRadius: 8,
+                        border: "2px dashed var(--primary)",
+                        background: "transparent",
+                        color: "var(--primary)",
+                        fontWeight: 600, cursor: "pointer",
+                        transition: "all 0.15s",
+                      }}
+                    >
+                      + Add Option
+                    </button>
+                  )}
                 </div>
 
                 {/* Actions */}
                 <div style={{ display: "flex", gap: 12, marginTop: 8 }}>
                   <button
                     type="button"
-                    onClick={() => setShowAddModal(false)}
+                    onClick={closeQuestionModal}
                     className="btn btn-secondary"
                     style={{ flex: 1 }}
                   >
@@ -549,7 +933,7 @@ export default function EditQuizPage({ params }: { params: Promise<{ id: string 
                     {savingQuestion ? (
                       <><div className="spinner spinner-sm" /> Saving...</>
                     ) : (
-                      "Save Question"
+                      editingQuestionId !== null ? "Update Question" : "Save Question"
                     )}
                   </button>
                 </div>

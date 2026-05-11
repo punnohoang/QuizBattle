@@ -103,15 +103,27 @@ export const quizApi = {
   ) => api.put(`/quizzes/${id}`, data),
   delete: (id: number) => api.delete(`/quizzes/${id}`),
 
-  getQuestions: (quizId: number) =>
-    api.get(`/quizzes/${quizId}/questions`),
-  createQuestion: (quizId: number, data: object) =>
-    api.post(`/quizzes/${quizId}/questions`, data),
-  updateQuestion: (quizId: number, questionId: number, data: object) =>
-    api.put(`/quizzes/${quizId}/questions/${questionId}`, data),
+  getQuestions: (quizId: number) => api.get(`/quizzes/${quizId}/questions`),
+  createQuestion: (quizId: number, data: object) => {
+    const payload = mapQuestionPayload(data);
+    return api.post(`/quizzes/${quizId}/questions`, payload);
+  },
+  updateQuestion: (quizId: number, questionId: number, data: object) => {
+    const payload = mapQuestionPayload(data);
+    return api.put(`/quizzes/${quizId}/questions/${questionId}`, payload);
+  },
   deleteQuestion: (quizId: number, questionId: number) =>
     api.delete(`/quizzes/${quizId}/questions/${questionId}`),
 };
+
+// Helper: map frontend-friendly question type strings to backend enums
+function mapQuestionPayload(data: any) {
+  if (!data || typeof data !== "object") return data;
+  const mapped = { ...data };
+  if (mapped.type === "multiple_choice") mapped.type = "MTC";
+  else if (mapped.type === "true_false") mapped.type = "TF";
+  return mapped;
+}
 
 export const roomApi = {
   create: (quiz_id: number) => api.post("/rooms", { quiz_id }),

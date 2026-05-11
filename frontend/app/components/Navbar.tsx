@@ -9,6 +9,7 @@ export default function Navbar() {
   const { user, isAuthenticated, logout } = useAuthStore();
   const router = useRouter();
   const pathname = usePathname();
+  const logoHref = isAuthenticated() ? "/dashboard" : "/";
 
   const handleLogout = async () => {
     try {
@@ -37,7 +38,7 @@ export default function Navbar() {
         }}
       >
         {/* Logo */}
-        <Link href="/" style={{ textDecoration: "none" }}>
+        <Link href={logoHref} style={{ textDecoration: "none" }}>
           <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
             <div
               style={{

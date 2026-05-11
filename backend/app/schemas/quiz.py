@@ -2,6 +2,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, Field
 
+from app.models.base import QuestionType, ScoreType
+
 
 # Quiz Schemas
 class QuizCreate(BaseModel):
@@ -50,8 +52,8 @@ class OptionResponse(BaseModel):
 
 class QuestionCreate(BaseModel):
     content: str = Field(min_length=1)
-    type: str = Field(default="multiple_choice")  # multiple_choice, true_false
-    score_type: str = Field(default="normal")  # normal, double
+    type: QuestionType = Field(default=QuestionType.MTC)
+    score_type: ScoreType = Field(default=ScoreType.normal)
     time_limit: int | None = Field(default=None, ge=5, le=300)
     order_index: int
     options: list[OptionCreate]
@@ -59,8 +61,8 @@ class QuestionCreate(BaseModel):
 
 class QuestionUpdate(BaseModel):
     content: str | None = Field(default=None, min_length=1)
-    type: str | None = Field(default=None)
-    score_type: str | None = Field(default=None)
+    type: QuestionType | None = Field(default=None)
+    score_type: ScoreType | None = Field(default=None)
     time_limit: int | None = Field(default=None, ge=5, le=300)
     order_index: int | None = Field(default=None)
     options: list[OptionCreate] | None = Field(default=None)
@@ -70,8 +72,8 @@ class QuestionResponse(BaseModel):
     id: int
     quiz_id: int
     content: str
-    type: str
-    score_type: str
+    type: QuestionType
+    score_type: ScoreType
     time_limit: int | None
     order_index: int
     options: list[OptionResponse]

@@ -1,10 +1,10 @@
 """Quiz content models."""
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, ForeignKey, Integer, String, Text
+from sqlalchemy import Boolean, Enum as SAEnum, ForeignKey, Integer, String, Text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
-from .base import Base, ModelConstants
+from .base import Base, ModelConstants, QuestionType, ScoreType
 
 if TYPE_CHECKING:
     from .user import User
@@ -93,17 +93,29 @@ class Question(Base):
         Text,
         nullable=False
     )
-    # type - mean the question type (multiple_choice | true_false)
-    type: Mapped[str] = mapped_column(
-        String(50),
+    # type - mean the question type (MTC | TF)
+    type: Mapped[QuestionType] = mapped_column(
+        SAEnum(
+            QuestionType,
+            native_enum=False,
+            validate_strings=True,
+            create_constraint=True,
+            name="question_type_enum",
+        ),
         nullable=False,
-        default="multiple_choice"
+        default=QuestionType.MTC
     )
     # score_type - mean the score multiple for this question can be (normal | double)
-    score_type: Mapped[str] = mapped_column(
-        String(50),
+    score_type: Mapped[ScoreType] = mapped_column(
+        SAEnum(
+            ScoreType,
+            native_enum=False,
+            validate_strings=True,
+            create_constraint=True,
+            name="score_type_enum",
+        ),
         nullable=False,
-        default="normal"
+        default=ScoreType.normal
     )
     time_limit: Mapped[int | None] = mapped_column(
         Integer,
@@ -136,11 +148,19 @@ class Question(Base):
 
     def validate_type(self) -> bool:
         """Validate question type is supported."""
-        return self.type in ModelConstants.QUESTION_TYPES
+        try:
+            QuestionType(self.type)
+            return True
+        except ValueError:
+            return False
 
     def validate_score_type(self) -> bool:
         """Validate score type is supported."""
-        return self.score_type in ModelConstants.SCORE_TYPES
+        try:
+            ScoreType(self.score_type)
+            return True
+        except ValueError:
+            return False
 
     @property
     def correct_options(self) -> list["Option"]:
@@ -153,7 +173,8 @@ class Question(Base):
         return len(self.correct_options) > 1
 
     def __str__(self) -> str:
-        return f"Question(id={self.id}, type='{self.type}', order_index={self.order_index})"
+        question_type = getattr(self.type, "value", self.type)
+        return f"Question(id={self.id}, type='{question_type}', order_index={self.order_index})"
 
 
 class Option(Base):

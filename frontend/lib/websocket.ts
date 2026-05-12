@@ -63,10 +63,17 @@ export function useWebSocket(roomCode: string) {
         }
     }, []);
 
+    const disconnect = useCallback(() => {
+        if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+            wsRef.current.close();
+        }
+    }, []);
+
     return {
         players,
         isConnected,
         sendEvent,
+        disconnect,
         error,
         ws: wsRef.current,
     };

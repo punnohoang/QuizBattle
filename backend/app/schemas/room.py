@@ -12,3 +12,10 @@ class RoomResponse(BaseModel):
 
     class Config:
         from_attributes = True
+
+
+class RoomAccessResponse(BaseModel):
+    room_id: int
+    room_code: str
+    status: str
+    is_host: bool

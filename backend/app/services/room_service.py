@@ -3,7 +3,7 @@ import string
 
 from fastapi import HTTPException
 from redis.asyncio import Redis
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -55,6 +55,7 @@ class RoomService:
         try:
             redis_ops = RoomRedisManager(self.redis)
             await redis_ops.set_room_state(session.id, False)
+            await redis_ops.set_room_host_id(session.id, user_id)
             await self.redis.set(room_code_key, session.id)
         except Exception as exc:
             await self.db.delete(session)
@@ -71,8 +72,8 @@ class RoomService:
         result = await self.db.execute(
             select(Quiz).where(
                 Quiz.id == quiz_id,
-                Quiz.user_id == user_id,
                 Quiz.is_deleted == False,
+                or_(Quiz.user_id == user_id, Quiz.is_public == True),
             )
         )
         quiz = result.scalar_one_or_none()
@@ -92,6 +93,37 @@ class RoomService:
             status_code=500,
             detail="Unable to generate a unique room code. Please try again.",
         )
+
+    async def get_room_access(self, user_id: int, room_code: str) -> dict:
+        redis_ops = RoomRedisManager(self.redis)
+
+        room_id = await self.redis.get(f"{ROOM_CODE_KEY_PREFIX}{room_code}")
+        if room_id:
+            room_id_int = int(room_id)
+            host_id = await redis_ops.get_room_host_id(room_id_int)
+            if host_id is not None:
+                return {
+                    "room_id": room_id_int,
+                    "room_code": room_code,
+                    "status": "waiting",
+                    "is_host": host_id == user_id,
+                }
+
+        result = await self.db.execute(
+            select(GameSession).where(GameSession.room_code == room_code)
+        )
+        session = result.scalar_one_or_none()
+
+        if not session:
+            raise HTTPException(status_code=404, detail="Room not found")
+
+        await redis_ops.set_room_host_id(session.id, session.host_id)
+        return {
+            "room_id": session.id,
+            "room_code": session.room_code,
+            "status": session.status,
+            "is_host": session.host_id == user_id,
+        }
 
     @staticmethod
     def _generate_code() -> str:

@@ -8,18 +8,48 @@ import AuthGuard from "../../../components/AuthGuard";
 import { LoadingSpinner } from "../../../components/LoadingSpinner";
 import { useWebSocket } from "@/lib/websocket";
 import { useAuthStore } from "@/lib/store";
-import type { WSEvent, WSPlayer } from "@/lib/types";
+import { roomApi } from "@/lib/api";
+import type { RoomAccessResponse } from "@/lib/types";
 
 export default function WaitRoomPage({ params }: { params: Promise<{ code: string }> }) {
   const router = useRouter();
   const { user } = useAuthStore();
   const { code } = use(params);
-  const { players, isConnected, sendEvent, error: wsError } = useWebSocket(code);
+  const { players, isConnected, sendEvent, disconnect, error: wsError } = useWebSocket(code);
+  const [isHost, setIsHost] = useState<boolean>(false);
+  const [checkingAccess, setCheckingAccess] = useState(true);
   const [error, setError] = useState("");
+  const [disconnecting, setDisconnecting] = useState(false);
 
   useEffect(() => {
     if (wsError) setError(wsError);
   }, [wsError]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    const loadAccess = async () => {
+      try {
+        setCheckingAccess(true);
+        const { data } = await roomApi.access(code) as { data: RoomAccessResponse };
+        if (!cancelled) {
+          setIsHost(data.is_host);
+          setError("");
+        }
+      } catch {
+        if (!cancelled) {
+          setError("Unable to verify room access.");
+        }
+      } finally {
+        if (!cancelled) setCheckingAccess(false);
+      }
+    };
+
+    loadAccess();
+    return () => {
+      cancelled = true;
+    };
+  }, [code]);
 
   const handleStartGame = () => {
     if (players.length === 0) {
@@ -27,6 +57,12 @@ export default function WaitRoomPage({ params }: { params: Promise<{ code: strin
       return;
     }
     sendEvent({ event: "game_start" });
+  };
+
+  const handleDisconnect = () => {
+    setDisconnecting(true);
+    disconnect();
+    router.push("/join");
   };
 
   return (
@@ -208,21 +244,42 @@ export default function WaitRoomPage({ params }: { params: Promise<{ code: strin
 
             {/* Action buttons */}
             <div style={{ display: "flex", gap: 12 }}>
-              <button
-                onClick={handleStartGame}
-                className="btn btn-primary btn-lg"
-                disabled={!isConnected || players.length === 0}
-                style={{ flex: 1 }}
-              >
-                {!isConnected ? (
-                  <><div className="spinner spinner-sm" /> Connecting...</>
-                ) : (
-                  "▶ Start Game"
-                )}
-              </button>
-              <Link href="/dashboard" className="btn btn-secondary btn-lg">
-                Cancel
-              </Link>
+              {!isHost ? (
+                <button
+                  onClick={handleDisconnect}
+                  className="btn btn-secondary btn-lg"
+                  disabled={disconnecting || checkingAccess}
+                  style={{ flex: 1 }}
+                >
+                  {checkingAccess ? (
+                    <><div className="spinner spinner-sm" /> Checking...</>
+                  ) : disconnecting ? (
+                    <><div className="spinner spinner-sm" /> Disconnecting...</>
+                  ) : (
+                    "Disconnect"
+                  )}
+                </button>
+              ) : (
+                <>
+                  <button
+                    onClick={handleStartGame}
+                    className="btn btn-primary btn-lg"
+                    disabled={!isConnected || players.length === 0 || checkingAccess}
+                    style={{ flex: 1 }}
+                  >
+                    {checkingAccess ? (
+                      <><div className="spinner spinner-sm" /> Checking...</>
+                    ) : !isConnected ? (
+                      <><div className="spinner spinner-sm" /> Connecting...</>
+                    ) : (
+                      "▶ Start Game"
+                    )}
+                  </button>
+                  <Link href="/dashboard" className="btn btn-secondary btn-lg">
+                    Cancel
+                  </Link>
+                </>
+              )}
             </div>
           </div>
         </div>

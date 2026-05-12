@@ -67,6 +67,7 @@ class ModelConstants:
     DEFAULT_SCORE_EARNED = 0
     DEFAULT_IS_ACTIVE = True
     DEFAULT_IS_DELETED = False
+    DEFAULT_IS_PUBLIC = False
     DEFAULT_IS_CORRECT = False
 
 

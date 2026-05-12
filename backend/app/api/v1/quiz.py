@@ -4,6 +4,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.core.dependencies import CurrentUser
 from app.db import get_db
 from app.schemas.quiz import (
+    PublicQuizResponse,
     QuizCreate,
     QuizUpdate,
     QuizResponse,
@@ -39,6 +40,30 @@ async def get_quizzes(
     """Get user's quizzes with pagination."""
     service = QuizService(db)
     return await service.get_quizzes(current_user.id, skip, limit, category)
+
+
+@router.get("/public", response_model=list[PublicQuizResponse])
+async def get_public_quizzes(
+    current_user: CurrentUser,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(10, ge=1, le=100),
+    category: str | None = None,
+    db: AsyncSession = Depends(get_db),
+) -> list[PublicQuizResponse]:
+    """Get all public quizzes."""
+    service = QuizService(db)
+    return await service.get_public_quizzes(skip, limit, category)
+
+
+@router.post("/{quiz_id}/clone", response_model=QuizResponse, status_code=status.HTTP_201_CREATED)
+async def clone_quiz(
+    quiz_id: int,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+) -> QuizResponse:
+    """Clone a public quiz into the current user's quizzes."""
+    service = QuizService(db)
+    return await service.clone_public_quiz(current_user.id, quiz_id)
 
 
 @router.get("/{quiz_id}", response_model=QuizDetailResponse)

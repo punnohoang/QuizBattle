@@ -15,7 +15,7 @@ const CATEGORIES = [
 
 export default function CreateQuizPage() {
   const router = useRouter();
-  const [form, setForm] = useState({ title: "", description: "", category: "Science" });
+  const [form, setForm] = useState({ title: "", description: "", category: "Science", is_public: false });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
 
@@ -28,6 +28,7 @@ export default function CreateQuizPage() {
       const payload = {
         title: form.title,
         category: form.category,
+        is_public: form.is_public,
         ...(form.description ? { description: form.description } : {}),
       };
       const { data } = await quizApi.create(payload) as { data: QuizResponse };
@@ -116,6 +117,32 @@ export default function CreateQuizPage() {
                   ))}
                 </select>
               </div>
+
+              <label
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 10,
+                  padding: "12px 14px",
+                  borderRadius: 12,
+                  border: "1px solid var(--border)",
+                  background: "var(--surface-alt)",
+                  cursor: "pointer",
+                }}
+              >
+                <input
+                  type="checkbox"
+                  checked={form.is_public}
+                  onChange={(e) => setForm({ ...form, is_public: e.target.checked })}
+                  style={{ width: 16, height: 16, accentColor: "var(--primary)" }}
+                />
+                <span>
+                  <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>Make this quiz public</span>
+                  <span style={{ display: "block", color: "var(--text-secondary)", fontSize: "0.85rem", marginTop: 2 }}>
+                    Public quizzes can be shown as visible to everyone.
+                  </span>
+                </span>
+              </label>
 
               <div style={{ display: "flex", gap: 12, marginTop: 8 }}>
                 <Link

@@ -10,12 +10,14 @@ class QuizCreate(BaseModel):
     title: str = Field(min_length=1, max_length=255)
     description: str | None = Field(default=None, max_length=1000)
     category: str = Field(min_length=1, max_length=100)
+    is_public: bool = Field(default=False)
 
 
 class QuizUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=255)
     description: str | None = Field(default=None, max_length=1000)
     category: str | None = Field(default=None, min_length=1, max_length=100)
+    is_public: bool | None = Field(default=None)
 
 
 class QuizResponse(BaseModel):
@@ -26,8 +28,16 @@ class QuizResponse(BaseModel):
     category: str
     question_count: int
     is_deleted: bool
+    is_public: bool
     created_at: datetime
     updated_at: datetime
+
+    class Config:
+        from_attributes = True
+
+
+class PublicQuizResponse(QuizResponse):
+    owner_username: str
 
     class Config:
         from_attributes = True

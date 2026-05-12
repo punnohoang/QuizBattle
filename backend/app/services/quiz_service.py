@@ -1,10 +1,16 @@
 from fastapi import HTTPException
-from sqlalchemy import select
+from sqlalchemy import or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
 from app.models import Option, Question, Quiz
-from app.schemas.quiz import QuestionCreate, QuestionUpdate, QuizCreate, QuizUpdate
+from app.schemas.quiz import (
+    PublicQuizResponse,
+    QuestionCreate,
+    QuestionUpdate,
+    QuizCreate,
+    QuizUpdate,
+)
 
 
 class QuizService:
@@ -17,6 +23,7 @@ class QuizService:
             title=payload.title,
             description=payload.description,
             category=payload.category,
+            is_public=payload.is_public,
         )
         self.db.add(quiz)
         await self.db.commit()
@@ -42,6 +49,24 @@ class QuizService:
         result = await self.db.execute(query)
         return result.scalars().all()
 
+    async def get_public_quizzes(
+        self,
+        skip: int,
+        limit: int,
+        category: str | None = None,
+    ) -> list[Quiz]:
+        query = select(Quiz).options(selectinload(Quiz.user)).where(
+            Quiz.is_public == True,
+            Quiz.is_deleted == False,
+        )
+
+        if category:
+            query = query.where(Quiz.category == category)
+
+        query = query.order_by(Quiz.created_at.desc()).offset(skip).limit(limit)
+        result = await self.db.execute(query)
+        return result.scalars().all()
+
     async def get_quiz(self, user_id: int, quiz_id: int) -> Quiz:
         result = await self.db.execute(
             select(Quiz)
@@ -59,6 +84,56 @@ class QuizService:
 
         return quiz
 
+    async def clone_public_quiz(self, user_id: int, quiz_id: int) -> Quiz:
+        result = await self.db.execute(
+            select(Quiz)
+            .options(selectinload(Quiz.questions).selectinload(Question.options))
+            .where(
+                Quiz.id == quiz_id,
+                Quiz.is_deleted == False,
+                or_(Quiz.user_id == user_id, Quiz.is_public == True),
+            )
+        )
+        source_quiz = result.scalar_one_or_none()
+
+        if not source_quiz:
+            raise HTTPException(status_code=404, detail="Quiz not found")
+
+        cloned_quiz = Quiz(
+            user_id=user_id,
+            title=source_quiz.title,
+            description=source_quiz.description,
+            category=source_quiz.category,
+            question_count=source_quiz.question_count,
+            is_deleted=False,
+            is_public=False,
+        )
+
+        for source_question in source_quiz.questions:
+            cloned_question = Question(
+                content=source_question.content,
+                type=source_question.type,
+                score_type=source_question.score_type,
+                time_limit=source_question.time_limit,
+                order_index=source_question.order_index,
+            )
+
+            for source_option in source_question.options:
+                cloned_question.options.append(
+                    Option(
+                        content=source_option.content,
+                        is_correct=source_option.is_correct,
+                        order_index=source_option.order_index,
+                    )
+                )
+
+            cloned_quiz.questions.append(cloned_question)
+
+        self.db.add(cloned_quiz)
+        await self.db.commit()
+        await self.db.refresh(cloned_quiz)
+        return cloned_quiz
+
     async def update_quiz(self, user_id: int, quiz_id: int, payload: QuizUpdate) -> Quiz:
         quiz = await self.get_quiz(user_id, quiz_id)
 
@@ -68,6 +143,8 @@ class QuizService:
             quiz.description = payload.description
         if payload.category is not None:
             quiz.category = payload.category
+        if payload.is_public is not None:
+            quiz.is_public = payload.is_public
 
         await self.db.commit()
         await self.db.refresh(quiz)

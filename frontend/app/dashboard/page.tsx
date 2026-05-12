@@ -2,11 +2,12 @@
 
 import { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Navbar from "../components/Navbar";
 import AuthGuard from "../components/AuthGuard";
 import { quizApi, roomApi } from "../../lib/api";
 import type { QuizResponse, RoomResponse } from "../../lib/types";
+import { useAuthStore } from "../../lib/store";
 
 const CATEGORIES = [
   "All", "Science", "History", "Geography", "Sports", "Music", "Technology", "Math", "Other",
@@ -31,27 +32,38 @@ const CATEGORY_COLORS: Record<string, { bg: string; color: string }> = {
   Other:      { bg: "#f3f4f6", color: "#374151" },
 };
 
+const VISIBILITY_STYLES = {
+  public: { bg: "#dcfce7", color: "#166534", border: "#86efac", label: "Public" },
+  private: { bg: "#f3f4f6", color: "#374151", border: "#d1d5db", label: "Private" },
+};
+
 export default function DashboardPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const viewMode = searchParams.get("view") === "public" ? "public" : "my";
+  const currentUser = useAuthStore((state) => state.user);
   const [quizzes, setQuizzes] = useState<QuizResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const [filterCat, setFilterCat] = useState("All");
   const [deletingId, setDeletingId] = useState<number | null>(null);
   const [hostingId, setHostingId] = useState<number | null>(null);
+  const [copyingId, setCopyingId] = useState<number | null>(null);
   const [error, setError] = useState("");
 
   const fetchQuizzes = useCallback(async () => {
     setLoading(true);
     try {
       const params = filterCat !== "All" ? { category: filterCat, limit: 100 } : { limit: 100 };
-      const { data } = await quizApi.list(params) as { data: QuizResponse[] };
+      const { data } = viewMode === "public"
+        ? await quizApi.listPublic(params) as { data: QuizResponse[] }
+        : await quizApi.list(params) as { data: QuizResponse[] };
       setQuizzes(data.filter((q) => !q.is_deleted));
     } catch {
       setError("Failed to load quizzes.");
     } finally {
       setLoading(false);
     }
-  }, [filterCat]);
+  }, [filterCat, viewMode]);
 
   useEffect(() => { fetchQuizzes(); }, [fetchQuizzes]);
 
@@ -80,6 +92,23 @@ export default function DashboardPage() {
     }
   };
 
+  const handleEditPublicQuiz = async (quiz: QuizResponse) => {
+    if (quiz.user_id === currentUser?.id) {
+      router.push(`/quiz/${quiz.id}/edit`);
+      return;
+    }
+
+    setCopyingId(quiz.id);
+    try {
+      const { data } = await quizApi.clone(quiz.id) as { data: QuizResponse };
+      router.push(`/quiz/${data.id}/edit?from_public=1`);
+    } catch {
+      alert("Failed to copy quiz.");
+    } finally {
+      setCopyingId(null);
+    }
+  };
+
   return (
     <AuthGuard>
       <div style={{ minHeight: "100vh", background: "var(--background)" }}>
@@ -100,15 +129,19 @@ export default function DashboardPage() {
           >
             <div>
               <h1 style={{ fontSize: "1.75rem", fontWeight: 800, marginBottom: 4, color: "var(--text-primary)" }}>
-                My Quizzes
+                {viewMode === "my" ? "My Quizzes" : "Public Quizzes"}
               </h1>
               <p style={{ color: "var(--text-muted)", fontSize: "0.9rem" }}>
-                {quizzes.length} quiz{quizzes.length !== 1 ? "zes" : ""} created
+                {viewMode === "my"
+                  ? `${quizzes.length} quiz${quizzes.length !== 1 ? "zes" : ""} created`
+                  : `${quizzes.length} public quiz${quizzes.length !== 1 ? "zes" : ""} available`}
               </p>
             </div>
-            <Link href="/quiz/create" className="btn btn-primary">
-              + Create Quiz
-            </Link>
+            <div style={{ display: "flex", gap: 10, flexWrap: "wrap" }}>
+              <Link href="/quiz/create" className="btn btn-primary">
+                + Create Quiz
+              </Link>
+            </div>
           </div>
 
           {/* Error */}
@@ -173,7 +206,7 @@ export default function DashboardPage() {
                 return (
                   <div key={quiz.id} className="quiz-card animate-fadeIn">
                     {/* Category badge */}
-                    <div>
+                    <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                       <span
                         style={{
                           display: "inline-flex",
@@ -187,6 +220,21 @@ export default function DashboardPage() {
                         }}
                       >
                         {quiz.category}
+                      </span>
+                      <span
+                        style={{
+                          display: "inline-flex",
+                          alignItems: "center",
+                          padding: "3px 10px",
+                          borderRadius: 999,
+                          fontSize: "0.75rem",
+                          fontWeight: 600,
+                          background: quiz.is_public ? VISIBILITY_STYLES.public.bg : VISIBILITY_STYLES.private.bg,
+                          color: quiz.is_public ? VISIBILITY_STYLES.public.color : VISIBILITY_STYLES.private.color,
+                          border: `1px solid ${quiz.is_public ? VISIBILITY_STYLES.public.border : VISIBILITY_STYLES.private.border}`,
+                        }}
+                      >
+                        {quiz.is_public ? "🌐 Public" : "🔒 Private"}
                       </span>
                     </div>
 
@@ -219,6 +267,12 @@ export default function DashboardPage() {
                       </p>
                     )}
 
+                    {viewMode === "public" && quiz.owner_username && (
+                      <p style={{ marginTop: 2, marginBottom: 0, color: "var(--text-muted)", fontSize: "0.8rem" }}>
+                        👤 {quiz.owner_username === currentUser?.username ? "You" : `@${quiz.owner_username}`}
+                      </p>
+                    )}
+
                     {/* Meta */}
                     <div
                       style={{
@@ -248,27 +302,44 @@ export default function DashboardPage() {
                           "▶ Host"
                         )}
                       </button>
-                      <Link
-                        href={`/quiz/${quiz.id}/edit`}
-                        className="btn btn-secondary btn-sm"
-                        style={{ flex: 1, textAlign: "center" }}
-                      >
-                        ✏️ Edit
-                      </Link>
-                      <button
-                        onClick={() => handleDelete(quiz.id)}
-                        className="btn btn-sm"
-                        disabled={deletingId === quiz.id}
-                        style={{
-                          background: "var(--danger-light)",
-                          color: "var(--danger)",
-                          border: "1px solid #fca5a5",
-                        }}
-                      >
-                        {deletingId === quiz.id ? (
-                          <div className="spinner spinner-sm" />
-                        ) : "🗑"}
-                      </button>
+                      {viewMode === "public" ? (
+                        <button
+                          onClick={() => handleEditPublicQuiz(quiz)}
+                          className="btn btn-secondary btn-sm"
+                          disabled={copyingId === quiz.id}
+                          style={{ flex: 1, textAlign: "center" }}
+                        >
+                          {copyingId === quiz.id ? (
+                            <><div className="spinner spinner-sm" /> Copying...</>
+                          ) : (
+                            quiz.user_id === currentUser?.id ? "✏️ Edit" : "📋 Copy & Edit"
+                          )}
+                        </button>
+                      ) : (
+                        <>
+                          <Link
+                            href={`/quiz/${quiz.id}/edit`}
+                            className="btn btn-secondary btn-sm"
+                            style={{ flex: 1, textAlign: "center" }}
+                          >
+                            ✏️ Edit
+                          </Link>
+                          <button
+                            onClick={() => handleDelete(quiz.id)}
+                            className="btn btn-sm"
+                            disabled={deletingId === quiz.id}
+                            style={{
+                              background: "var(--danger-light)",
+                              color: "var(--danger)",
+                              border: "1px solid #fca5a5",
+                            }}
+                          >
+                            {deletingId === quiz.id ? (
+                              <div className="spinner spinner-sm" />
+                            ) : "🗑"}
+                          </button>
+                        </>
+                      )}
                     </div>
                   </div>
                 );

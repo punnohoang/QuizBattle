@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback, use } from "react";
 import type { FormEvent } from "react";
 import Link from "next/link";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import Navbar from "../../../components/Navbar";
 import AuthGuard from "../../../components/AuthGuard";
 import { quizApi, roomApi } from "../../../../lib/api";
@@ -30,8 +30,10 @@ const getOptionColor = (index: number) => {
 
 export default function EditQuizPage({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { id } = use(params);
   const quizId = parseInt(id, 10);
+  const copiedFromPublic = searchParams.get("from_public") === "1";
 
   const [quiz, setQuiz] = useState<QuizDetailResponse | null>(null);
   const [loading, setLoading] = useState(true);
@@ -43,6 +45,7 @@ export default function EditQuizPage({ params }: { params: Promise<{ id: string 
     title: "",
     description: "",
     category: "",
+    is_public: false,
   });
 
   const [showAddModal, setShowAddModal] = useState(false);
@@ -158,6 +161,7 @@ export default function EditQuizPage({ params }: { params: Promise<{ id: string 
       title: quiz.title,
       description: quiz.description ?? "",
       category: quiz.category,
+      is_public: quiz.is_public,
     });
     setShowEditQuizModal(true);
   };
@@ -170,6 +174,7 @@ export default function EditQuizPage({ params }: { params: Promise<{ id: string 
         title: quizForm.title.trim(),
         description: quizForm.description.trim() || undefined,
         category: quizForm.category.trim(),
+        is_public: quizForm.is_public,
       });
       setShowEditQuizModal(false);
       loadQuiz();
@@ -276,6 +281,32 @@ export default function EditQuizPage({ params }: { params: Promise<{ id: string 
             </span>
           </div>
 
+          {copiedFromPublic && (
+            <div
+              style={{
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "space-between",
+                gap: 12,
+                padding: "12px 16px",
+                borderRadius: 12,
+                background: "var(--surface-alt)",
+                border: "1px solid var(--border)",
+                marginBottom: 20,
+              }}
+            >
+              <div>
+                <div style={{ fontWeight: 700, color: "var(--text-primary)" }}>Copied from a public quiz</div>
+                <div style={{ color: "var(--text-secondary)", fontSize: "0.875rem" }}>
+                  This copy now belongs to you. Use the button on the right when you are done editing.
+                </div>
+              </div>
+              <button onClick={() => router.push("/dashboard")} className="btn btn-secondary btn-sm">
+                Back to My Quizzes
+              </button>
+            </div>
+          )}
+
           {loading ? (
             <div style={{ display: "flex", justifyContent: "center", padding: 80 }}>
               <div className="spinner" />
@@ -330,6 +361,17 @@ export default function EditQuizPage({ params }: { params: Promise<{ id: string 
                 >
                   <div style={{ marginBottom: 8 }}>
                     <span className="badge">{quiz.category}</span>
+                    <span
+                      className="badge"
+                      style={{
+                        marginLeft: 8,
+                        background: quiz.is_public ? "#dcfce7" : "#f3f4f6",
+                        color: quiz.is_public ? "#166534" : "#374151",
+                        borderColor: quiz.is_public ? "#86efac" : "#d1d5db",
+                      }}
+                    >
+                      {quiz.is_public ? "🌐 Public" : "🔒 Private"}
+                    </span>
                     {quiz.questions.length === 0 && (
                       <span className="badge badge-warning" style={{ marginLeft: 8 }}>No questions</span>
                     )}
@@ -360,7 +402,7 @@ export default function EditQuizPage({ params }: { params: Promise<{ id: string 
                     {hostingId === quizId ? (
                       <><div className="spinner spinner-sm" /> Starting...</>
                     ) : (
-                      "▶ Play Now"
+                      "▶ Host"
                     )}
                   </button>
                 </div>
@@ -627,6 +669,32 @@ export default function EditQuizPage({ params }: { params: Promise<{ id: string 
                     onChange={(e) => setQuizForm({ ...quizForm, category: e.target.value })}
                   />
                 </div>
+
+                <label
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 10,
+                    padding: "12px 14px",
+                    borderRadius: 12,
+                    border: "1px solid var(--border)",
+                    background: "var(--surface-alt)",
+                    cursor: "pointer",
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={quizForm.is_public}
+                    onChange={(e) => setQuizForm({ ...quizForm, is_public: e.target.checked })}
+                    style={{ width: 16, height: 16, accentColor: "var(--primary)" }}
+                  />
+                  <span>
+                    <span style={{ fontWeight: 600, color: "var(--text-primary)" }}>Public quiz</span>
+                    <span style={{ display: "block", color: "var(--text-secondary)", fontSize: "0.85rem", marginTop: 2 }}>
+                      Turn this on if you want the quiz to be marked public.
+                    </span>
+                  </span>
+                </label>
 
                 <div style={{ display: "flex", gap: 12, marginTop: 8 }}>
                   <button

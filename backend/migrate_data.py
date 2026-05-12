@@ -13,7 +13,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_asyn
 
 # Import models
 import bcrypt
-from app.db import engine, AsyncSessionLocal
+from app.db import AsyncSessionLocal, engine, _ensure_quiz_columns
 from app.models import (
     Base, Role, User, RoleUser, Quiz, Question, Option,
     GameSession, Participant, PlayerAnswer, RefreshToken
@@ -30,6 +30,7 @@ async def create_tables() -> None:
     print("Creating tables...")
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        await conn.run_sync(_ensure_quiz_columns)
     print("✓ Tables created successfully")
 
 
@@ -227,6 +228,7 @@ async def seed_quizzes(db: AsyncSession, users: dict[str, User]) -> dict[str, Qu
                 category=quiz_data["category"],
                 question_count=len(quiz_data["questions"]),
                 is_deleted=False,
+                is_public=False,
             )
             db.add(quiz)
             await db.flush()

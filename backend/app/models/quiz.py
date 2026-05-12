@@ -2,6 +2,7 @@
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, Enum as SAEnum, ForeignKey, Integer, String, Text
+from sqlalchemy import text
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from .base import Base, ModelConstants, QuestionType, ScoreType
@@ -45,6 +46,13 @@ class Quiz(Base):
         nullable=False,
         index=True
     )
+    is_public: Mapped[bool] = mapped_column(
+        Boolean,
+        default=ModelConstants.DEFAULT_IS_PUBLIC,
+        server_default=text("false"),
+        nullable=False,
+        index=True
+    )
 
     # Relationships
     user: Mapped["User"] = relationship(
@@ -64,6 +72,11 @@ class Quiz(Base):
         back_populates="quiz",
         lazy="selectin"
     )
+
+    @property
+    def owner_username(self) -> str:
+        """Get the owning user's username for public quiz views."""
+        return getattr(self.user, "username", "")
 
     @property
     def active_questions(self) -> list["Question"]:

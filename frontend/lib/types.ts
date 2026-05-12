@@ -55,16 +55,19 @@ export interface QuizCreate {
   title: string;
   description?: string;
   category: string;
+  is_public?: boolean;
 }
 
 export interface QuizResponse {
   id: number;
   user_id: number;
+  owner_username?: string;
   title: string;
   description: string | null;
   category: string;
   question_count: number;
   is_deleted: boolean;
+  is_public: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -78,6 +81,13 @@ export interface RoomResponse {
   id: number;
   room_code: string;
   status: string;
+}
+
+export interface RoomAccessResponse {
+  room_id: number;
+  room_code: string;
+  status: string;
+  is_host: boolean;
 }
 
 // ─── WebSocket event types ────────────────────────

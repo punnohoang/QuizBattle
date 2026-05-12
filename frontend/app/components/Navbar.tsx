@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useRouter, usePathname } from "next/navigation";
+import { useRouter, usePathname, useSearchParams } from "next/navigation";
 import { useAuthStore } from "../../lib/store";
 import { authApi } from "../../lib/api";
 
@@ -9,6 +9,8 @@ export default function Navbar() {
   const { user, isAuthenticated, logout } = useAuthStore();
   const router = useRouter();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const dashboardView = searchParams.get("view") ?? "my";
   const logoHref = isAuthenticated() ? "/dashboard" : "/";
 
   const handleLogout = async () => {
@@ -24,7 +26,18 @@ export default function Navbar() {
 
   const navLinks = [
     { href: "/dashboard", label: "My Quizzes", icon: "📚" },
+    { href: "/dashboard?view=public", label: "Public Quizzes", icon: "🌐" },
+    { href: "/join", label: "Join", icon: "🎯" },
   ];
+
+  const isLinkActive = (href: string) => {
+    if (!href.startsWith("/dashboard")) {
+      return pathname === href;
+    }
+
+    const isPublicLink = href.includes("view=public");
+    return pathname === "/dashboard" && (isPublicLink ? dashboardView === "public" : dashboardView !== "public");
+  };
 
   return (
     <nav className="navbar">
@@ -79,9 +92,9 @@ export default function Navbar() {
                   href={link.href}
                   className="btn btn-ghost btn-sm"
                   style={{
-                    color: pathname === link.href ? "var(--primary)" : "var(--text-secondary)",
-                    background: pathname === link.href ? "var(--primary-muted)" : undefined,
-                    fontWeight: pathname === link.href ? 600 : 500,
+                    color: isLinkActive(link.href) ? "var(--primary)" : "var(--text-secondary)",
+                    background: isLinkActive(link.href) ? "var(--primary-muted)" : undefined,
+                    fontWeight: isLinkActive(link.href) ? 600 : 500,
                   }}
                 >
                   {link.icon} {link.label}

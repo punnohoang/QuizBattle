@@ -94,13 +94,16 @@ export const authApi = {
 export const quizApi = {
   list: (params?: { skip?: number; limit?: number; category?: string }) =>
     api.get("/quizzes", { params }),
+  listPublic: (params?: { skip?: number; limit?: number; category?: string }) =>
+    api.get("/quizzes/public", { params }),
   get: (id: number) => api.get(`/quizzes/${id}`),
-  create: (data: { title: string; description?: string; category: string }) =>
+  create: (data: { title: string; description?: string; category: string; is_public?: boolean }) =>
     api.post("/quizzes", data),
   update: (
     id: number,
-    data: { title?: string; description?: string; category?: string }
+    data: { title?: string; description?: string; category?: string; is_public?: boolean }
   ) => api.put(`/quizzes/${id}`, data),
+  clone: (id: number) => api.post(`/quizzes/${id}/clone`),
   delete: (id: number) => api.delete(`/quizzes/${id}`),
 
   getQuestions: (quizId: number) => api.get(`/quizzes/${quizId}/questions`),
@@ -127,6 +130,7 @@ function mapQuestionPayload(data: any) {
 
 export const roomApi = {
   create: (quiz_id: number) => api.post("/rooms", { quiz_id }),
+  access: (room_code: string) => api.get(`/rooms/${room_code}/access`),
 };
 
 export const getWsUrl = (roomCode: string) => {

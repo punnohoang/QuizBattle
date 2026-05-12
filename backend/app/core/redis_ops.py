@@ -66,6 +66,17 @@ class RoomRedisManager:
         state = await self.redis.hget(key, "state")
         return state == "true" if state else False
 
+    async def set_room_host_id(self, room_id: int, host_id: int) -> None:
+        """Store room host user id in room state hash."""
+        key = get_room_state_key(room_id)
+        await self.redis.hset(key, "host_id", str(host_id))
+
+    async def get_room_host_id(self, room_id: int) -> int | None:
+        """Get room host user id from room state hash."""
+        key = get_room_state_key(room_id)
+        host_id = await self.redis.hget(key, "host_id")
+        return int(host_id) if host_id else None
+
     # ========================================================================
     # 3. PLAYERS LIST (Set, 24h TTL)
     # ========================================================================

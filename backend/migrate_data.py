@@ -71,25 +71,25 @@ async def seed_users(db: AsyncSession, roles: dict[str, Role]) -> dict[str, User
     users_data = [
         {
             "username": "admin",
-            "email": "admin@quizbattle.local",
+            "email": "admin@example.com",
             "password": "admin123",
             "roles": ["admin", "user"]
         },
         {
             "username": "testuser1",
-            "email": "testuser1@quizbattle.local",
+            "email": "testuser1@example.com",
             "password": "password123",
             "roles": ["user"]
         },
         {
             "username": "testuser2",
-            "email": "testuser2@quizbattle.local",
+            "email": "testuser2@example.com",
             "password": "password123",
             "roles": ["user"]
         },
         {
             "username": "moderator",
-            "email": "moderator@quizbattle.local",
+            "email": "moderator@example.com",
             "password": "password123",
             "roles": ["moderator", "user"]
         },
@@ -142,8 +142,8 @@ async def seed_quizzes(db: AsyncSession, users: dict[str, User]) -> dict[str, Qu
             "questions": [
                 {
                     "content": "What is the capital of France?",
-                    "type": "multiple_choice",
-                    "score_type": "points",
+                    "type": "MTC",
+                    "score_type": "normal",
                     "time_limit": 30,
                     "options": [
                         {"content": "Paris", "is_correct": True},
@@ -154,8 +154,8 @@ async def seed_quizzes(db: AsyncSession, users: dict[str, User]) -> dict[str, Qu
                 },
                 {
                     "content": "What is 2 + 2?",
-                    "type": "multiple_choice",
-                    "score_type": "points",
+                    "type": "MTC",
+                    "score_type": "normal",
                     "time_limit": 20,
                     "options": [
                         {"content": "3", "is_correct": False},
@@ -174,8 +174,8 @@ async def seed_quizzes(db: AsyncSession, users: dict[str, User]) -> dict[str, Qu
             "questions": [
                 {
                     "content": "What is the chemical symbol for Gold?",
-                    "type": "multiple_choice",
-                    "score_type": "points",
+                    "type": "MTC",
+                    "score_type": "normal",
                     "time_limit": 30,
                     "options": [
                         {"content": "Gd", "is_correct": False},
@@ -194,8 +194,8 @@ async def seed_quizzes(db: AsyncSession, users: dict[str, User]) -> dict[str, Qu
             "questions": [
                 {
                     "content": "In what year did World War II end?",
-                    "type": "multiple_choice",
-                    "score_type": "points",
+                    "type": "MTC",
+                    "score_type": "normal",
                     "time_limit": 30,
                     "options": [
                         {"content": "1943", "is_correct": False},

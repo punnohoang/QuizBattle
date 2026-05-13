@@ -4,18 +4,18 @@ import { useEffect, useState, useRef, use } from "react";
 import { useRouter } from "next/navigation";
 import AuthGuard from "../../../components/AuthGuard";
 import { getWsUrl } from "../../../../lib/api";
+import { GameplayQuestion } from "../../../components/GameplayQuestion";
 import type { WSEvent, QuestionResponse, WSPlayer } from "../../../../lib/types";
 
-const OPT_LABELS = ["A", "B", "C", "D"];
+interface StateRecovery {
+  question_index: number;
+  question: QuestionResponse;
+  time_remaining: number;
+  is_answered: boolean;
+  snapshot_at: string;
+}
 
-const OPT_STYLES = [
-  { bg: "linear-gradient(135deg, #2563eb, #1d4ed8)", shadow: "0 4px 16px rgba(37,99,235,0.3)" },
-  { bg: "linear-gradient(135deg, #059669, #047857)", shadow: "0 4px 16px rgba(5,150,105,0.3)" },
-  { bg: "linear-gradient(135deg, #d97706, #b45309)", shadow: "0 4px 16px rgba(217,119,6,0.3)" },
-  { bg: "linear-gradient(135deg, #dc2626, #b91c1c)", shadow: "0 4px 16px rgba(220,38,38,0.3)" },
-];
-
-type GamePhase = "connecting" | "waiting" | "question" | "answer_reveal" | "final";
+type GamePhase = "connecting" | "waiting" | "countdown" | "question" | "answer_reveal" | "final";
 
 interface Score {
   user_id: number;
@@ -36,6 +36,8 @@ export default function PlayRoomPage({ params }: { params: Promise<{ code: strin
   const [scores, setScores] = useState<Score[]>([]);
   const [error, setError] = useState("");
   const [questionNum, setQuestionNum] = useState(0);
+  const [countdownVal, setCountdownVal] = useState(3);
+  const [isRecovering, setIsRecovering] = useState(false);
 
   const wsRef = useRef<WebSocket | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -56,10 +58,87 @@ export default function PlayRoomPage({ params }: { params: Promise<{ code: strin
       try {
         const data: WSEvent = JSON.parse(event.data);
 
+        // Player join/leave events
         if (data.event === "player_joined" || data.event === "player_left") {
           if (data.participants) setPlayers(data.participants);
         }
 
+        // Game starting countdown (3-2-1)
+        if (data.event === "game_starting") {
+          setPhase("countdown");
+          if (data.countdown) setCountdownVal(data.countdown);
+        }
+
+        // Game started - ready for questions
+        if (data.event === "game_started") {
+          setPhase("waiting");
+        }
+
+        // New question - start fresh with timer
+        if (data.event === "question_start" && data.question) {
+          clearTimer();
+          const q = data.question;
+          setQuestion(q);
+          setSelectedOption(null);
+          setPhase("question");
+          setQuestionNum((n) => n + 1);
+          const limit = q.time_limit ?? 20;
+          setMaxTime(limit);
+          setTimeLeft(limit);
+
+          timerRef.current = setInterval(() => {
+            setTimeLeft((t) => {
+              if (t <= 1) {
+                clearTimer();
+                setPhase("answer_reveal");
+                return 0;
+              }
+              return t - 1;
+            });
+          }, 1000);
+        }
+
+        // Timer tick from backend (overrides client timer for anti-F5)
+        if (data.event === "question_timer") {
+          if (data.time_remaining !== undefined) {
+            setTimeLeft(data.time_remaining);
+          }
+        }
+
+        // Question time up
+        if (data.event === "question_time_up") {
+          clearTimer();
+          setPhase("answer_reveal");
+        }
+
+        // State recovery on reconnect (Anti-F5)
+        if (data.event === "state_recovered" && data.state) {
+          setIsRecovering(true);
+          const state: StateRecovery = data.state;
+          setQuestion(state.question);
+          setQuestionNum(state.question_index + 1);
+          setPhase("question");
+          setMaxTime(state.question.time_limit ?? 20);
+          setTimeLeft(state.time_remaining);
+          setSelectedOption(null);
+
+          // Resume timer
+          clearTimer();
+          timerRef.current = setInterval(() => {
+            setTimeLeft((t) => {
+              if (t <= 1) {
+                clearTimer();
+                setPhase("answer_reveal");
+                return 0;
+              }
+              return t - 1;
+            });
+          }, 1000);
+
+          setTimeout(() => setIsRecovering(false), 2000);
+        }
+
+        // Old "question" event fallback for compatibility
         if (data.event === "question" && data.question) {
           clearTimer();
           const q = data.question;
@@ -113,7 +192,10 @@ export default function PlayRoomPage({ params }: { params: Promise<{ code: strin
 
     return () => {
       clearTimer();
-      socket.close();
+      if (socket.readyState === WebSocket.OPEN) {
+        socket.close();
+      }
+      wsRef.current = null;
     };
   }, [code]);
 
@@ -122,14 +204,6 @@ export default function PlayRoomPage({ params }: { params: Promise<{ code: strin
     setSelectedOption(optId);
     wsRef.current?.send(JSON.stringify({ event: "answer", option_id: optId }));
   };
-
-  // Timer ring calculation
-  const radius = 40;
-  const circumference = 2 * Math.PI * radius;
-  const progress = timeLeft / maxTime;
-  const dashOffset = circumference * (1 - progress);
-  const timerColor =
-    timeLeft > maxTime * 0.5 ? "#2563eb" : timeLeft > maxTime * 0.25 ? "#d97706" : "#dc2626";
 
   /* ── ERROR ───────────────────────────────────── */
   if (error) {
@@ -181,10 +255,10 @@ export default function PlayRoomPage({ params }: { params: Promise<{ code: strin
                       background: i === 0
                         ? "linear-gradient(135deg, #fef3c7, #fde68a)"
                         : i === 1
-                        ? "linear-gradient(135deg, #f1f5f9, #e2e8f0)"
-                        : i === 2
-                        ? "linear-gradient(135deg, #fef3e8, #fed7aa)"
-                        : "var(--surface-alt)",
+                          ? "linear-gradient(135deg, #f1f5f9, #e2e8f0)"
+                          : i === 2
+                            ? "linear-gradient(135deg, #fef3e8, #fed7aa)"
+                            : "var(--surface-alt)",
                       border: `1px solid ${i === 0 ? "#fcd34d" : i === 1 ? "#cbd5e1" : i === 2 ? "#fdba74" : "var(--border)"}`,
                       transition: "transform 0.2s",
                     }}
@@ -288,246 +362,58 @@ export default function PlayRoomPage({ params }: { params: Promise<{ code: strin
     );
   }
 
-  /* ── QUESTION / ANSWER REVEAL ─────────────── */
-  return (
-    <AuthGuard>
-      <div
-        style={{
-          minHeight: "100vh",
-          background: "var(--background)",
-          display: "flex",
-          flexDirection: "column",
-        }}
-      >
-        {/* Top Bar */}
+  /* ── COUNTDOWN (3-2-1) ────────────────────── */
+  if (phase === "countdown") {
+    return (
+      <AuthGuard>
         <div
           style={{
-            background: "var(--surface)",
-            borderBottom: "1px solid var(--border)",
-            padding: "12px 24px",
-            display: "flex",
-            alignItems: "center",
-            justifyContent: "space-between",
-            boxShadow: "var(--shadow-sm)",
-            position: "sticky",
-            top: 0,
-            zIndex: 50,
-          }}
-        >
-          {/* Left: brand + question number */}
-          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-            <div
-              style={{
-                width: 32, height: 32, borderRadius: 8,
-                background: "var(--gradient-primary)",
-                display: "flex", alignItems: "center", justifyContent: "center",
-                fontSize: "0.9rem",
-              }}
-            >⚡</div>
-            <span style={{ fontWeight: 700, color: "var(--primary)", fontSize: "1rem" }}>
-              QuizBattle
-            </span>
-            <span
-              style={{
-                background: "var(--primary-muted)",
-                color: "var(--primary)",
-                borderRadius: 999,
-                padding: "3px 12px",
-                fontSize: "0.8rem",
-                fontWeight: 700,
-                border: "1px solid var(--accent-light)",
-              }}
-            >
-              Q{questionNum}
-            </span>
-          </div>
-
-          {/* Center: circular timer */}
-          <svg width="72" height="72" viewBox="0 0 100 100">
-            <circle
-              cx="50" cy="50" r={radius}
-              fill="none"
-              stroke="var(--border)"
-              strokeWidth="7"
-            />
-            <circle
-              cx="50" cy="50" r={radius}
-              fill="none"
-              stroke={timerColor}
-              strokeWidth="7"
-              strokeLinecap="round"
-              strokeDasharray={circumference}
-              strokeDashoffset={dashOffset}
-              className="timer-ring"
-              style={{ transition: "stroke-dashoffset 1s linear, stroke 0.3s" }}
-            />
-            <text
-              x="50" y="56"
-              textAnchor="middle"
-              fill={timerColor}
-              fontSize="24"
-              fontWeight="800"
-              fontFamily="Inter, sans-serif"
-            >
-              {timeLeft}
-            </text>
-          </svg>
-
-          {/* Right: players count */}
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              gap: 6,
-              fontSize: "0.875rem",
-              color: "var(--text-secondary)",
-              fontWeight: 500,
-            }}
-          >
-            <span>👥</span>
-            <span>{players.length} players</span>
-          </div>
-        </div>
-
-        {/* Question */}
-        <div
-          style={{
-            padding: "36px 24px 24px",
-            textAlign: "center",
-            maxWidth: 760,
-            margin: "0 auto",
-            width: "100%",
-          }}
-        >
-          {question?.score_type === "double" && (
-            <div
-              style={{
-                display: "inline-flex",
-                alignItems: "center",
-                gap: 6,
-                background: "#fef3c7",
-                border: "1px solid #fcd34d",
-                color: "#92400e",
-                borderRadius: 999,
-                padding: "4px 14px",
-                fontSize: "0.8rem",
-                fontWeight: 700,
-                marginBottom: 16,
-              }}
-            >
-              ⭐ Double Points
-            </div>
-          )}
-          <h2
-            style={{
-              fontSize: "clamp(1.2rem, 3.5vw, 1.75rem)",
-              fontWeight: 700,
-              lineHeight: 1.45,
-              color: "var(--text-primary)",
-              marginBottom: 0,
-            }}
-          >
-            {question?.content}
-          </h2>
-        </div>
-
-        {/* Options */}
-        <div
-          style={{
-            flex: 1,
+            minHeight: "100vh",
+            background: "var(--gradient-primary)",
             display: "flex",
             alignItems: "center",
             justifyContent: "center",
-            padding: "0 24px 48px",
+            flexDirection: "column",
+            gap: 24,
           }}
         >
           <div
             style={{
-              width: "100%",
-              maxWidth: 760,
-              display: "grid",
-              gridTemplateColumns: "1fr 1fr",
-              gap: 14,
-            }}
-          >
-            {question?.options.map((opt, i) => {
-              const isSelected = selectedOption === opt.id;
-              const isCorrect = phase === "answer_reveal" && opt.is_correct;
-              const isWrong = phase === "answer_reveal" && isSelected && !opt.is_correct;
-
-              let borderOverride = "2px solid transparent";
-              if (isCorrect) borderOverride = "3px solid #059669";
-              else if (isWrong) borderOverride = "3px solid #dc2626";
-              else if (isSelected) borderOverride = "3px solid white";
-
-              const opacityVal =
-                phase === "answer_reveal" && !isCorrect && !isSelected ? 0.45 : 1;
-
-              return (
-                <button
-                  key={opt.id}
-                  className="answer-opt"
-                  onClick={() => handleSelectOption(opt.id)}
-                  disabled={phase !== "question"}
-                  style={{
-                    background: OPT_STYLES[i].bg,
-                    boxShadow: isSelected ? "none" : OPT_STYLES[i].shadow,
-                    border: borderOverride,
-                    opacity: opacityVal,
-                    transform: isSelected ? "scale(0.97)" : undefined,
-                  }}
-                >
-                  <span
-                    style={{
-                      width: 34, height: 34,
-                      borderRadius: 8,
-                      background: "rgba(255,255,255,0.25)",
-                      display: "flex", alignItems: "center", justifyContent: "center",
-                      fontWeight: 800, fontSize: "0.875rem",
-                      flexShrink: 0,
-                    }}
-                  >
-                    {phase === "answer_reveal" && isCorrect
-                      ? "✓"
-                      : phase === "answer_reveal" && isWrong
-                      ? "✗"
-                      : OPT_LABELS[i]}
-                  </span>
-                  <span style={{ fontSize: "clamp(0.875rem, 2vw, 1rem)", lineHeight: 1.4 }}>
-                    {opt.content}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-        </div>
-
-        {/* Locked in toast */}
-        {selectedOption !== null && phase === "question" && (
-          <div
-            style={{
-              position: "fixed",
-              bottom: 28,
-              left: "50%",
-              transform: "translateX(-50%)",
-              background: "var(--primary)",
+              fontSize: "clamp(4rem, 20vw, 12rem)",
+              fontWeight: 900,
               color: "white",
-              padding: "12px 28px",
-              borderRadius: 999,
-              fontWeight: 700,
-              fontSize: "0.95rem",
-              boxShadow: "var(--shadow-primary)",
-              animation: "slideInUp 0.3s ease-out",
-              whiteSpace: "nowrap",
-              display: "flex",
-              alignItems: "center",
-              gap: 8,
+              animation: `pulse 0.6s ease-out, scale 0.6s ease-out`,
+              textShadow: "0 8px 32px rgba(0,0,0,0.2)",
             }}
           >
-            ✅ Answer locked in!
+            {countdownVal}
           </div>
-        )}
-      </div>
-    </AuthGuard>
-  );
+          <p style={{ color: "rgba(255,255,255,0.8)", fontSize: "1.2rem", fontWeight: 600 }}>
+            Get ready!
+          </p>
+        </div>
+      </AuthGuard>
+    );
+  }
+
+  /* ── QUESTION / ANSWER REVEAL ─────────────── */
+  if (phase === "question" || phase === "answer_reveal") {
+    return (
+      <AuthGuard>
+        <GameplayQuestion
+          question={question!}
+          questionNumber={questionNum}
+          timeLeft={timeLeft}
+          maxTime={maxTime}
+          players={players}
+          selectedOption={selectedOption}
+          phase={phase}
+          isRecovering={isRecovering}
+          onSelectOption={handleSelectOption}
+        />
+      </AuthGuard>
+    );
+  }
+  // Fallback for unknown phase (should not reach here)
+  return null;
 }

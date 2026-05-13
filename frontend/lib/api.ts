@@ -131,6 +131,8 @@ function mapQuestionPayload(data: any) {
 export const roomApi = {
   create: (quiz_id: number) => api.post("/rooms", { quiz_id }),
   access: (room_code: string) => api.get(`/rooms/${room_code}/access`),
+  start: (room_code: string) => api.post(`/rooms/${room_code}/start`),
+  startQuestions: (room_code: string) => api.post(`/rooms/${room_code}/start-questions`),
 };
 
 export const getWsUrl = (roomCode: string) => {

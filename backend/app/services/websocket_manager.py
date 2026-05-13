@@ -20,8 +20,7 @@ class ConnectionManager:
         self.active_connections: dict[str, list[tuple[WebSocket, int]]] = {}
 
     async def connect(self, room_code: str, websocket: WebSocket, user_id: int) -> None:
-        """Add a new connection to the room."""
-        await websocket.accept()
+        """Add a new connection to the room (assumes already accepted)."""
         if room_code not in self.active_connections:
             self.active_connections[room_code] = []
         self.active_connections[room_code].append((websocket, user_id))

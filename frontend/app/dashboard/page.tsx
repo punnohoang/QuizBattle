@@ -8,6 +8,7 @@ import AuthGuard from "../components/AuthGuard";
 import { quizApi, roomApi } from "../../lib/api";
 import type { QuizResponse, RoomResponse } from "../../lib/types";
 import { useAuthStore } from "../../lib/store";
+import { QuizGridSkeleton } from "../components/QuizSkeleton";
 
 const CATEGORIES = [
   "All", "Science", "History", "Geography", "Sports", "Music", "Technology", "Math", "Other",
@@ -22,14 +23,14 @@ function formatDate(iso: string) {
 }
 
 const CATEGORY_COLORS: Record<string, { bg: string; color: string }> = {
-  Science:    { bg: "#dbeafe", color: "#1d4ed8" },
-  History:    { bg: "#fef3c7", color: "#92400e" },
-  Geography:  { bg: "#d1fae5", color: "#065f46" },
-  Sports:     { bg: "#fce7f3", color: "#9d174d" },
-  Music:      { bg: "#ede9fe", color: "#5b21b6" },
+  Science: { bg: "#dbeafe", color: "#1d4ed8" },
+  History: { bg: "#fef3c7", color: "#92400e" },
+  Geography: { bg: "#d1fae5", color: "#065f46" },
+  Sports: { bg: "#fce7f3", color: "#9d174d" },
+  Music: { bg: "#ede9fe", color: "#5b21b6" },
   Technology: { bg: "#e0f2fe", color: "#075985" },
-  Math:       { bg: "#fef9c3", color: "#713f12" },
-  Other:      { bg: "#f3f4f6", color: "#374151" },
+  Math: { bg: "#fef9c3", color: "#713f12" },
+  Other: { bg: "#f3f4f6", color: "#374151" },
 };
 
 const VISIBILITY_STYLES = {
@@ -166,9 +167,7 @@ export default function DashboardPage() {
 
           {/* Loading */}
           {loading ? (
-            <div style={{ display: "flex", justifyContent: "center", padding: 80 }}>
-              <div className="spinner" />
-            </div>
+            <QuizGridSkeleton count={6} />
           ) : quizzes.length === 0 ? (
             <div
               className="card"

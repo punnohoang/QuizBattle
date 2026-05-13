@@ -140,7 +140,7 @@ class RoomService:
         
         room_id = int(room_id_value)
         
-        # Get room from database
+        # Get room from database with fresh read
         result = await self.db.execute(
             select(GameSession).where(GameSession.id == room_id)
         )
@@ -153,30 +153,35 @@ class RoomService:
         if session.host_id != user_id:
             raise HTTPException(status_code=403, detail="Only host can start the game")
         
-        # Check room status
-        if session.status != "waiting":
-            raise HTTPException(status_code=400, detail="Room is not in waiting state")
+        # Check room status - use case-insensitive check for safety
+        current_status = session.status.lower() if session.status else ""
+        if current_status not in ["waiting", "start_pending"]:
+            raise HTTPException(status_code=400, detail=f"Room is not in waiting state (current: {session.status})")
         
-        # Update room status in database
-        session.status = "playing"
-        session.started_at = datetime.utcnow()
-        self.db.add(session)
-        await self.db.commit()
-        await self.db.refresh(session)
-        
-        # Update room state in Redis
-        redis_ops = RoomRedisManager(self.redis)
-        await redis_ops.set_room_state(room_id, True)
-        
-        # Load and cache all questions from Quiz
-        await self._cache_quiz_questions(room_id, session.quiz_id)
-        
-        return {
-            "room_id": room_id,
-            "room_code": room_code,
-            "status": "playing",
-            "started_at": session.started_at.isoformat(),
-        }
+        try:
+            # Update room status in database FIRST
+            session.status = "playing"
+            session.started_at = datetime.utcnow()
+            self.db.add(session)
+            await self.db.commit()
+            await self.db.refresh(session)
+            
+            # Update room state in Redis AFTER DB confirms
+            redis_ops = RoomRedisManager(self.redis)
+            await redis_ops.set_room_state(room_id, True)
+            
+            # Load and cache all questions from Quiz
+            await self._cache_quiz_questions(room_id, session.quiz_id)
+            
+            return {
+                "room_id": room_id,
+                "room_code": room_code,
+                "status": "playing",
+                "started_at": session.started_at.isoformat(),
+            }
+        except Exception as e:
+            await self.db.rollback()
+            raise HTTPException(status_code=500, detail=f"Failed to start room: {str(e)}")
     
     async def _cache_quiz_questions(self, room_id: int, quiz_id: int) -> None:
         """

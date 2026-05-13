@@ -129,7 +129,7 @@ export default function PlayRoomPage({ params }: { params: Promise<{ code: strin
           setMaxTime(state.question.time_limit ?? 20);
           setTimeLeft(state.time_remaining);
           setSelectedOption(null);
-          
+
           // Resume timer
           clearTimer();
           timerRef.current = setInterval(() => {
@@ -215,12 +215,12 @@ export default function PlayRoomPage({ params }: { params: Promise<{ code: strin
   const circumference = 2 * Math.PI * radius;
   const progress = timeLeft / maxTime;
   const dashOffset = circumference * (1 - progress);
-  
+
   // Color: Green → Yellow → Red with animation
   let timerColor = "#2563eb"; // Blue for normal
   let timerBgColor = "var(--surface)";
   let isLowTime = false;
-  
+
   if (timeLeft <= maxTime * 0.25) {
     timerColor = "#dc2626"; // Red - danger
     isLowTime = true;
@@ -278,10 +278,10 @@ export default function PlayRoomPage({ params }: { params: Promise<{ code: strin
                       background: i === 0
                         ? "linear-gradient(135deg, #fef3c7, #fde68a)"
                         : i === 1
-                        ? "linear-gradient(135deg, #f1f5f9, #e2e8f0)"
-                        : i === 2
-                        ? "linear-gradient(135deg, #fef3e8, #fed7aa)"
-                        : "var(--surface-alt)",
+                          ? "linear-gradient(135deg, #f1f5f9, #e2e8f0)"
+                          : i === 2
+                            ? "linear-gradient(135deg, #fef3e8, #fed7aa)"
+                            : "var(--surface-alt)",
                       border: `1px solid ${i === 0 ? "#fcd34d" : i === 1 ? "#cbd5e1" : i === 2 ? "#fdba74" : "var(--border)"}`,
                       transition: "transform 0.2s",
                     }}
@@ -491,7 +491,7 @@ export default function PlayRoomPage({ params }: { params: Promise<{ code: strin
                 strokeDasharray={circumference}
                 strokeDashoffset={dashOffset}
                 className="timer-ring"
-                style={{ 
+                style={{
                   transition: "stroke-dashoffset 1s linear, stroke 0.3s",
                   filter: isLowTime ? "drop-shadow(0 0 8px #dc2626)" : "none"
                 }}
@@ -503,7 +503,7 @@ export default function PlayRoomPage({ params }: { params: Promise<{ code: strin
                 fontSize="24"
                 fontWeight="800"
                 fontFamily="Inter, sans-serif"
-                style={{ 
+                style={{
                   animation: isLowTime ? "pulse 0.5s ease-in-out infinite" : "none"
                 }}
               >
@@ -648,8 +648,8 @@ export default function PlayRoomPage({ params }: { params: Promise<{ code: strin
                     {phase === "answer_reveal" && isCorrect
                       ? "✓"
                       : phase === "answer_reveal" && isWrong
-                      ? "✗"
-                      : OPT_LABELS[i]}
+                        ? "✗"
+                        : OPT_LABELS[i]}
                   </span>
                   <span style={{ fontSize: "clamp(0.875rem, 2vw, 1rem)", lineHeight: 1.4 }}>
                     {opt.content}

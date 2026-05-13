@@ -1,6 +1,7 @@
 from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
+import json
 
 from app.api.router import api_router
 from app.core.cache import RedisClient, get_redis
@@ -15,6 +16,7 @@ from app.services.websocket_manager import (
     remove_player_from_redis,
     verify_ws_token,
 )
+from app.services.game_state_manager import GameStateManager
 
 app = FastAPI(title="QuizBattle API")
 
@@ -92,12 +94,15 @@ async def websocket_room(room_code: str, websocket: WebSocket):
 
     async with AsyncSessionLocal() as db:
         username = await get_username(db, user_id)
+        state_manager = GameStateManager(redis, db)
 
     await manager.connect(room_code, websocket, user_id)
     await add_player_to_redis(redis, room_id, user_id, username)
 
     player = {"user_id": user_id, "username": username}
     participants = await get_room_players_from_redis(redis, room_id)
+    
+    # Broadcast player joined
     await manager.broadcast(
         room_code,
         {
@@ -107,9 +112,21 @@ async def websocket_room(room_code: str, websocket: WebSocket):
         },
     )
 
+    # Try to recover game state if reconnecting
+    recovered_state = await state_manager.recover_game_state(room_id, user_id)
+    if recovered_state:
+        # Player is reconnecting - send recovered state
+        await websocket.send_json({
+            "event": "state_recovered",
+            "state": recovered_state,
+            "message": "Game state recovered (you may have reconnected)",
+        })
+
     try:
         while True:
-            await websocket.receive_text()
+            data = await websocket.receive_text()
+            # Handle incoming messages from client if needed
+            # (answer submissions, etc.)
     except WebSocketDisconnect:
         manager.disconnect(room_code, websocket, user_id)
         await remove_player_from_redis(redis, room_id, user_id, username)

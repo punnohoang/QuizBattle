@@ -660,6 +660,20 @@ select {
   0%   { background-position: -200% 0; }
   100% { background-position: 200% 0; }
 }
+@keyframes scale {
+  0%   { transform: scale(0.3); }
+  50%  { transform: scale(1.15); }
+  100% { transform: scale(1); }
+}
+@keyframes pulseRed {
+  0%, 100% { filter: drop-shadow(0 0 0px #dc2626); }
+  50%       { filter: drop-shadow(0 0 12px #dc2626); }
+}
+@keyframes countdownBounce {
+  0%   { transform: scale(0.5) translateY(20px); opacity: 0; }
+  50%  { transform: scale(1.1); }
+  100% { transform: scale(1) translateY(0); opacity: 1; }
+}
 
 .animate-fadeIn       { animation: fadeIn 0.3s ease-out both; }
 .animate-slideInLeft  { animation: slideInLeft 0.3s ease-out both; }

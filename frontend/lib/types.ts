@@ -97,10 +97,22 @@ export interface WSPlayer {
 }
 
 export interface WSEvent {
-  event: "player_joined" | "player_left" | "game_start" | "question" | "result" | "game_end";
+  event: "player_joined" | "player_left" | "game_start" | "question" | "result" | "game_end" 
+    | "game_starting" | "game_started" | "question_start" | "question_timer" | "question_time_up" | "state_recovered";
   player?: WSPlayer;
   participants?: WSPlayer[];
-  // game events (future)
+  // game events
   question?: QuestionResponse;
   scores?: Record<number, number>;
+  // new timer events
+  countdown?: number;
+  time_remaining?: number;
+  // state recovery
+  state?: {
+    question_index: number;
+    question: QuestionResponse;
+    time_remaining: number;
+    is_answered: boolean;
+    snapshot_at: string;
+  };
 }

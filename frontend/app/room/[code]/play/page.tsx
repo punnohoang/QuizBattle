@@ -6,16 +6,24 @@ import AuthGuard from "../../../components/AuthGuard";
 import { getWsUrl } from "../../../../lib/api";
 import type { WSEvent, QuestionResponse, WSPlayer } from "../../../../lib/types";
 
+interface StateRecovery {
+  question_index: number;
+  question: QuestionResponse;
+  time_remaining: number;
+  is_answered: boolean;
+  snapshot_at: string;
+}
+
 const OPT_LABELS = ["A", "B", "C", "D"];
 
 const OPT_STYLES = [
-  { bg: "linear-gradient(135deg, #2563eb, #1d4ed8)", shadow: "0 4px 16px rgba(37,99,235,0.3)" },
-  { bg: "linear-gradient(135deg, #059669, #047857)", shadow: "0 4px 16px rgba(5,150,105,0.3)" },
-  { bg: "linear-gradient(135deg, #d97706, #b45309)", shadow: "0 4px 16px rgba(217,119,6,0.3)" },
-  { bg: "linear-gradient(135deg, #dc2626, #b91c1c)", shadow: "0 4px 16px rgba(220,38,38,0.3)" },
+  { bg: "linear-gradient(135deg, #2563eb, #1d4ed8)", shadow: "0 4px 16px rgba(37,99,235,0.3)", label: "Blue" },
+  { bg: "linear-gradient(135deg, #059669, #047857)", shadow: "0 4px 16px rgba(5,150,105,0.3)", label: "Green" },
+  { bg: "linear-gradient(135deg, #d97706, #b45309)", shadow: "0 4px 16px rgba(217,119,6,0.3)", label: "Yellow" },
+  { bg: "linear-gradient(135deg, #dc2626, #b91c1c)", shadow: "0 4px 16px rgba(220,38,38,0.3)", label: "Red" },
 ];
 
-type GamePhase = "connecting" | "waiting" | "question" | "answer_reveal" | "final";
+type GamePhase = "connecting" | "waiting" | "countdown" | "question" | "answer_reveal" | "final";
 
 interface Score {
   user_id: number;
@@ -36,6 +44,8 @@ export default function PlayRoomPage({ params }: { params: Promise<{ code: strin
   const [scores, setScores] = useState<Score[]>([]);
   const [error, setError] = useState("");
   const [questionNum, setQuestionNum] = useState(0);
+  const [countdownVal, setCountdownVal] = useState(3);
+  const [isRecovering, setIsRecovering] = useState(false);
 
   const wsRef = useRef<WebSocket | null>(null);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -56,10 +66,87 @@ export default function PlayRoomPage({ params }: { params: Promise<{ code: strin
       try {
         const data: WSEvent = JSON.parse(event.data);
 
+        // Player join/leave events
         if (data.event === "player_joined" || data.event === "player_left") {
           if (data.participants) setPlayers(data.participants);
         }
 
+        // Game starting countdown (3-2-1)
+        if (data.event === "game_starting") {
+          setPhase("countdown");
+          if (data.countdown) setCountdownVal(data.countdown);
+        }
+
+        // Game started - ready for questions
+        if (data.event === "game_started") {
+          setPhase("waiting");
+        }
+
+        // New question - start fresh with timer
+        if (data.event === "question_start" && data.question) {
+          clearTimer();
+          const q = data.question;
+          setQuestion(q);
+          setSelectedOption(null);
+          setPhase("question");
+          setQuestionNum((n) => n + 1);
+          const limit = q.time_limit ?? 20;
+          setMaxTime(limit);
+          setTimeLeft(limit);
+
+          timerRef.current = setInterval(() => {
+            setTimeLeft((t) => {
+              if (t <= 1) {
+                clearTimer();
+                setPhase("answer_reveal");
+                return 0;
+              }
+              return t - 1;
+            });
+          }, 1000);
+        }
+
+        // Timer tick from backend (overrides client timer for anti-F5)
+        if (data.event === "question_timer") {
+          if (data.time_remaining !== undefined) {
+            setTimeLeft(data.time_remaining);
+          }
+        }
+
+        // Question time up
+        if (data.event === "question_time_up") {
+          clearTimer();
+          setPhase("answer_reveal");
+        }
+
+        // State recovery on reconnect (Anti-F5)
+        if (data.event === "state_recovered" && data.state) {
+          setIsRecovering(true);
+          const state: StateRecovery = data.state;
+          setQuestion(state.question);
+          setQuestionNum(state.question_index + 1);
+          setPhase("question");
+          setMaxTime(state.question.time_limit ?? 20);
+          setTimeLeft(state.time_remaining);
+          setSelectedOption(null);
+          
+          // Resume timer
+          clearTimer();
+          timerRef.current = setInterval(() => {
+            setTimeLeft((t) => {
+              if (t <= 1) {
+                clearTimer();
+                setPhase("answer_reveal");
+                return 0;
+              }
+              return t - 1;
+            });
+          }, 1000);
+
+          setTimeout(() => setIsRecovering(false), 2000);
+        }
+
+        // Old "question" event fallback for compatibility
         if (data.event === "question" && data.question) {
           clearTimer();
           const q = data.question;
@@ -128,8 +215,18 @@ export default function PlayRoomPage({ params }: { params: Promise<{ code: strin
   const circumference = 2 * Math.PI * radius;
   const progress = timeLeft / maxTime;
   const dashOffset = circumference * (1 - progress);
-  const timerColor =
-    timeLeft > maxTime * 0.5 ? "#2563eb" : timeLeft > maxTime * 0.25 ? "#d97706" : "#dc2626";
+  
+  // Color: Green → Yellow → Red with animation
+  let timerColor = "#2563eb"; // Blue for normal
+  let timerBgColor = "var(--surface)";
+  let isLowTime = false;
+  
+  if (timeLeft <= maxTime * 0.25) {
+    timerColor = "#dc2626"; // Red - danger
+    isLowTime = true;
+  } else if (timeLeft <= maxTime * 0.5) {
+    timerColor = "#d97706"; // Yellow/Orange - warning
+  }
 
   /* ── ERROR ───────────────────────────────────── */
   if (error) {
@@ -288,6 +385,40 @@ export default function PlayRoomPage({ params }: { params: Promise<{ code: strin
     );
   }
 
+  /* ── COUNTDOWN (3-2-1) ────────────────────── */
+  if (phase === "countdown") {
+    return (
+      <AuthGuard>
+        <div
+          style={{
+            minHeight: "100vh",
+            background: "var(--gradient-primary)",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            flexDirection: "column",
+            gap: 24,
+          }}
+        >
+          <div
+            style={{
+              fontSize: "clamp(4rem, 20vw, 12rem)",
+              fontWeight: 900,
+              color: "white",
+              animation: `pulse 0.6s ease-out, scale 0.6s ease-out`,
+              textShadow: "0 8px 32px rgba(0,0,0,0.2)",
+            }}
+          >
+            {countdownVal}
+          </div>
+          <p style={{ color: "rgba(255,255,255,0.8)", fontSize: "1.2rem", fontWeight: 600 }}>
+            Get ready!
+          </p>
+        </div>
+      </AuthGuard>
+    );
+  }
+
   /* ── QUESTION / ANSWER REVEAL ─────────────── */
   return (
     <AuthGuard>
@@ -343,35 +474,62 @@ export default function PlayRoomPage({ params }: { params: Promise<{ code: strin
           </div>
 
           {/* Center: circular timer */}
-          <svg width="72" height="72" viewBox="0 0 100 100">
-            <circle
-              cx="50" cy="50" r={radius}
-              fill="none"
-              stroke="var(--border)"
-              strokeWidth="7"
-            />
-            <circle
-              cx="50" cy="50" r={radius}
-              fill="none"
-              stroke={timerColor}
-              strokeWidth="7"
-              strokeLinecap="round"
-              strokeDasharray={circumference}
-              strokeDashoffset={dashOffset}
-              className="timer-ring"
-              style={{ transition: "stroke-dashoffset 1s linear, stroke 0.3s" }}
-            />
-            <text
-              x="50" y="56"
-              textAnchor="middle"
-              fill={timerColor}
-              fontSize="24"
-              fontWeight="800"
-              fontFamily="Inter, sans-serif"
-            >
-              {timeLeft}
-            </text>
-          </svg>
+          <div style={{ position: "relative" }}>
+            <svg width="72" height="72" viewBox="0 0 100 100">
+              <circle
+                cx="50" cy="50" r={radius}
+                fill="none"
+                stroke="var(--border)"
+                strokeWidth="7"
+              />
+              <circle
+                cx="50" cy="50" r={radius}
+                fill="none"
+                stroke={timerColor}
+                strokeWidth="7"
+                strokeLinecap="round"
+                strokeDasharray={circumference}
+                strokeDashoffset={dashOffset}
+                className="timer-ring"
+                style={{ 
+                  transition: "stroke-dashoffset 1s linear, stroke 0.3s",
+                  filter: isLowTime ? "drop-shadow(0 0 8px #dc2626)" : "none"
+                }}
+              />
+              <text
+                x="50" y="56"
+                textAnchor="middle"
+                fill={timerColor}
+                fontSize="24"
+                fontWeight="800"
+                fontFamily="Inter, sans-serif"
+                style={{ 
+                  animation: isLowTime ? "pulse 0.5s ease-in-out infinite" : "none"
+                }}
+              >
+                {timeLeft}
+              </text>
+            </svg>
+            {isRecovering && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: -8, right: -8,
+                  width: 20, height: 20,
+                  borderRadius: "50%",
+                  background: "#10b981",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "white",
+                  fontSize: "0.7rem",
+                  fontWeight: 900,
+                }}
+              >
+                ✓
+              </div>
+            )}
+          </div>
 
           {/* Right: players count */}
           <div

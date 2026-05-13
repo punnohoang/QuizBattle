@@ -10,12 +10,12 @@ interface AnswerOptionsProps {
 }
 
 const OPTION_COLORS: Array<{ rgb: string }> = [
-  { rgb: "59,130,246"  }, // blue
-  { rgb: "16,185,129"  }, // emerald
-  { rgb: "245,158,11"  }, // amber
-  { rgb: "239,68,68"   }, // red
-  { rgb: "139,92,246"  }, // violet
-  { rgb: "6,182,212"   }, // cyan
+  { rgb: "59,130,246" }, // blue
+  { rgb: "16,185,129" }, // emerald
+  { rgb: "245,158,11" }, // amber
+  { rgb: "239,68,68" }, // red
+  { rgb: "139,92,246" }, // violet
+  { rgb: "6,182,212" }, // cyan
 ];
 
 const LABELS = ["A", "B", "C", "D", "E", "F"];
@@ -232,20 +232,20 @@ export function AnswerOptions({
         style={getGridStyle(count)}
       >
         {options.map((opt, i) => {
-          const color      = OPTION_COLORS[i % OPTION_COLORS.length];
+          const color = OPTION_COLORS[i % OPTION_COLORS.length];
           const isSelected = selectedOption === opt.id;
-          const isCorrect  = phase === "answer_reveal" && opt.is_correct;
-          const isWrong    = phase === "answer_reveal" && isSelected && !opt.is_correct;
-          const isFaded    = phase === "answer_reveal" && !isCorrect && !isSelected;
-          const canHover   = phase === "question" && !selectedOption;
+          const isCorrect = phase === "answer_reveal" && opt.is_correct;
+          const isWrong = phase === "answer_reveal" && isSelected && !opt.is_correct;
+          const isFaded = phase === "answer_reveal" && !isCorrect && !isSelected;
+          const canHover = phase === "question" && !selectedOption;
 
           const cls = [
             "ao-btn",
-            canHover                              && "ao-hoverable",
-            isSelected && phase === "question"    && "ao-selected",
-            isCorrect                             && "ao-correct",
-            isWrong                               && "ao-wrong",
-            isFaded                               && "ao-faded",
+            canHover && "ao-hoverable",
+            isSelected && phase === "question" && "ao-selected",
+            isCorrect && "ao-correct",
+            isWrong && "ao-wrong",
+            isFaded && "ao-faded",
           ].filter(Boolean).join(" ");
 
           return (

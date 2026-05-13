@@ -15,7 +15,7 @@ export default function WaitRoomPage({ params }: { params: Promise<{ code: strin
   const router = useRouter();
   const { user } = useAuthStore();
   const { code } = use(params);
-  const { players, isConnected, sendEvent, disconnect, error: wsError } = useWebSocket(code);
+  const { players, isConnected, sendEvent, disconnect, error: wsError, ws } = useWebSocket(code);
   const [isHost, setIsHost] = useState<boolean>(false);
   const [checkingAccess, setCheckingAccess] = useState(true);
   const [error, setError] = useState("");
@@ -24,6 +24,28 @@ export default function WaitRoomPage({ params }: { params: Promise<{ code: strin
   useEffect(() => {
     if (wsError) setError(wsError);
   }, [wsError]);
+
+  // Listen for game_started event to redirect players to play page
+  useEffect(() => {
+    if (!ws) return;
+
+    const handleMessage = (event: Event) => {
+      try {
+        const messageEvent = event as MessageEvent;
+        const data = JSON.parse(messageEvent.data);
+
+        if (data.event === "game_started" && !isHost) {
+          console.log("🎮 Game started! Redirecting to play page...");
+          router.push(`/room/${code}/play`);
+        }
+      } catch (err) {
+        // Ignore parse errors
+      }
+    };
+
+    ws.addEventListener("message", handleMessage);
+    return () => ws.removeEventListener("message", handleMessage);
+  }, [ws, isHost, code, router]);
 
   useEffect(() => {
     let cancelled = false;

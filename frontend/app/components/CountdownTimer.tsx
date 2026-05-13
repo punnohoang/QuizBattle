@@ -33,14 +33,14 @@ export function CountdownTimer({
   const timerColor = isDanger
     ? "var(--clr-danger)"
     : isWarning
-    ? "var(--clr-warning)"
-    : "var(--clr-safe)";
+      ? "var(--clr-warning)"
+      : "var(--clr-safe)";
 
   const glowColor = isDanger
     ? "drop-shadow(0 0 10px var(--clr-danger-glow))"
     : isWarning
-    ? "drop-shadow(0 0 6px var(--clr-warning-glow))"
-    : "none";
+      ? "drop-shadow(0 0 6px var(--clr-warning-glow))"
+      : "none";
 
   return (
     <>

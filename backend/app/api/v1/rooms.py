@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, status, WebSocketException
+from fastapi import APIRouter, Depends, status, WebSocketException, HTTPException
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 import asyncio
@@ -6,10 +6,11 @@ import json
 
 from app.core.cache import get_redis
 from app.core.dependencies import CurrentUser
-from app.db import get_db
+from app.db import get_db, AsyncSessionLocal
 from app.schemas.room import RoomAccessResponse, RoomCreateRequest, RoomResponse
 from app.services.room_service import RoomService
 from app.services.websocket_manager import manager
+from app.services.quiz_game_engine import QuizGameEngine
 
 router = APIRouter(prefix="/rooms", tags=["rooms"])
 
@@ -79,3 +80,47 @@ async def start_room(
     asyncio.create_task(broadcast_countdown())
     
     return result
+
+
+@router.post("/{room_code}/start-questions", status_code=status.HTTP_200_OK)
+async def start_question_loop(
+    room_code: str,
+    current_user: CurrentUser,
+    db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis),
+) -> dict:
+    """
+    Start the question timer loop (Host only).
+    Begins broadcasting questions with timer countdown.
+    Handles state snapshots for anti-F5 recovery.
+    
+    Prerequisite: Game must be in "playing" status (from /start endpoint)
+    """
+    service = RoomService(db, redis)
+    
+    # Verify host and get room
+    access = await service.get_room_access(current_user.id, room_code)
+    if not access["is_host"]:
+        raise HTTPException(status_code=403, detail="Only host can start questions")
+    
+    room_id = access["room_id"]
+    
+    # Create game engine and start question loop
+    async with AsyncSessionLocal() as session:
+        game_engine = QuizGameEngine(redis, session)
+        
+        # Define broadcast callback
+        async def broadcast_to_room(event: dict):
+            await manager.broadcast(room_code, event)
+        
+        # Start the question loop in background
+        asyncio.create_task(
+            game_engine.start_question_loop(room_id, broadcast_to_room)
+        )
+    
+    return {
+        "room_id": room_id,
+        "room_code": room_code,
+        "status": "questions_started",
+        "message": "Question loop started",
+    }

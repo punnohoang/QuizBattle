@@ -52,10 +52,6 @@ export default function WaitRoomPage({ params }: { params: Promise<{ code: strin
   }, [code]);
 
   const handleStartGame = () => {
-    if (players.length === 0) {
-      setError("Waiting for players to join...");
-      return;
-    }
     startGame();
   };
 
@@ -65,6 +61,7 @@ export default function WaitRoomPage({ params }: { params: Promise<{ code: strin
       const response = await roomApi.start(code);
 
       if (response.status === 200) {
+        await roomApi.startQuestions(code);
         // Game started successfully, wait for countdown and then redirect to play
         setTimeout(() => {
           router.push(`/room/${code}/play`);
@@ -282,7 +279,7 @@ export default function WaitRoomPage({ params }: { params: Promise<{ code: strin
                   <button
                     onClick={handleStartGame}
                     className="btn btn-primary btn-lg"
-                    disabled={!isConnected || players.length === 0 || checkingAccess}
+                    disabled={checkingAccess}
                     style={{ flex: 1 }}
                   >
                     {checkingAccess ? (

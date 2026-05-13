@@ -57,7 +57,10 @@ export function useWebSocket(roomCode: string) {
         return () => {
             if (wsRef.current) {
                 console.log("🧹 Cleaning up WebSocket");
-                wsRef.current.close();
+                if (wsRef.current.readyState === WebSocket.OPEN) {
+                    wsRef.current.close();
+                }
+                wsRef.current = null;
             }
         };
     }, [roomCode]);

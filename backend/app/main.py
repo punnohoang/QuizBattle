@@ -84,8 +84,15 @@ async def websocket_room(room_code: str, websocket: WebSocket):
     token = websocket.query_params.get("token")
     redis = await get_redis()
     user_id = None
+    db = None
+    username = None
+    player = None
 
     try:
+        # Accept early so client doesn't see "closed before established"
+        await websocket.accept()
+
+        # Verify token
         user_id = await verify_ws_token(token)
     except HTTPException as e:
         logger.warning(f"Invalid WebSocket token: {e.detail}")
@@ -95,6 +102,7 @@ async def websocket_room(room_code: str, websocket: WebSocket):
             pass
         return
 
+    # Get room ID
     room_id = await get_room_id_by_code(redis, room_code)
     if room_id is None:
         logger.warning(f"Room not found: {room_code}")
@@ -104,16 +112,20 @@ async def websocket_room(room_code: str, websocket: WebSocket):
             pass
         return
 
-    username = None
+    db = None
     try:
-        async with AsyncSessionLocal() as db:
-            username = await get_username(db, user_id)
-            state_manager = GameStateManager(redis, db)
+        # Create persistent DB session
+        db = AsyncSessionLocal()
+        
+        # Get username
+        username = await get_username(db, user_id)
+        state_manager = GameStateManager(redis, db)
 
-        # Connect and accept WebSocket
+        # Register connection (already accepted)
         await manager.connect(room_code, websocket, user_id)
         logger.info(f"✓ User {user_id} ({username}) connected to room {room_code}")
         
+        # Add to Redis
         await add_player_to_redis(redis, room_id, user_id, username)
 
         player = {"user_id": user_id, "username": username}
@@ -134,7 +146,6 @@ async def websocket_room(room_code: str, websocket: WebSocket):
             recovered_state = await state_manager.recover_game_state(room_id, user_id)
             if recovered_state:
                 try:
-                    # Player is reconnecting - send recovered state
                     await websocket.send_json({
                         "event": "state_recovered",
                         "state": recovered_state,
@@ -144,7 +155,7 @@ async def websocket_room(room_code: str, websocket: WebSocket):
                 except Exception as e:
                     logger.error(f"Failed to send state_recovered: {e}")
         except Exception as e:
-            logger.error(f"Error recovering state: {e}")
+            logger.error(f"Error recovering state: {e}", exc_info=True)
 
         # Message loop - keep connection open
         try:
@@ -164,9 +175,9 @@ async def websocket_room(room_code: str, websocket: WebSocket):
         except WebSocketDisconnect:
             logger.info(f"User {user_id} disconnected from room {room_code}")
         finally:
-            # Cleanup
+            # Cleanup - disconnect and remove from Redis
             try:
-                if username:
+                if username and user_id:
                     manager.disconnect(room_code, websocket, user_id)
                     await remove_player_from_redis(redis, room_id, user_id, username)
 
@@ -187,6 +198,14 @@ async def websocket_room(room_code: str, websocket: WebSocket):
             await websocket.close()
         except:
             pass
+    finally:
+        # Close DB session
+        if db:
+            try:
+                await db.close()
+            except:
+                pass
+
 
 
 @app.get("/")

@@ -56,7 +56,25 @@ export default function WaitRoomPage({ params }: { params: Promise<{ code: strin
       setError("Waiting for players to join...");
       return;
     }
-    sendEvent({ event: "game_start" });
+    startGame();
+  };
+
+  const startGame = async () => {
+    try {
+      setError("");
+      const response = await roomApi.start(code);
+
+      if (response.status === 200) {
+        // Game started successfully, wait for countdown and then redirect to play
+        setTimeout(() => {
+          router.push(`/room/${code}/play`);
+        }, 4000); // Wait for 3s countdown + 1s buffer
+      }
+    } catch (err: any) {
+      const errorMsg = err.response?.data?.detail || "Failed to start game";
+      setError(errorMsg);
+      console.error(err);
+    }
   };
 
   const handleDisconnect = () => {

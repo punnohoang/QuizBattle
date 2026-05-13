@@ -2,6 +2,7 @@ from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect, stat
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.openapi.utils import get_openapi
 import json
+import logging
 
 from app.api.router import api_router
 from app.core.cache import RedisClient, get_redis
@@ -17,6 +18,8 @@ from app.services.websocket_manager import (
     verify_ws_token,
 )
 from app.services.game_state_manager import GameStateManager
+
+logger = logging.getLogger(__name__)
 
 app = FastAPI(title="QuizBattle API")
 
@@ -80,10 +83,12 @@ app.include_router(api_router)
 async def websocket_room(room_code: str, websocket: WebSocket):
     token = websocket.query_params.get("token")
     redis = await get_redis()
+    user_id = None
 
     try:
         user_id = await verify_ws_token(token)
-    except HTTPException:
+    except HTTPException as e:
+        logger.warning(f"Invalid WebSocket token: {e.detail}")
         try:
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         except:
@@ -92,18 +97,23 @@ async def websocket_room(room_code: str, websocket: WebSocket):
 
     room_id = await get_room_id_by_code(redis, room_code)
     if room_id is None:
+        logger.warning(f"Room not found: {room_code}")
         try:
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         except:
             pass
         return
 
+    username = None
     try:
         async with AsyncSessionLocal() as db:
             username = await get_username(db, user_id)
             state_manager = GameStateManager(redis, db)
 
+        # Connect and accept WebSocket
         await manager.connect(room_code, websocket, user_id)
+        logger.info(f"✓ User {user_id} ({username}) connected to room {room_code}")
+        
         await add_player_to_redis(redis, room_id, user_id, username)
 
         player = {"user_id": user_id, "username": username}
@@ -120,46 +130,59 @@ async def websocket_room(room_code: str, websocket: WebSocket):
         )
 
         # Try to recover game state if reconnecting
-        recovered_state = await state_manager.recover_game_state(room_id, user_id)
-        if recovered_state:
-            try:
-                # Player is reconnecting - send recovered state
-                await websocket.send_json({
-                    "event": "state_recovered",
-                    "state": recovered_state,
-                    "message": "Game state recovered (you may have reconnected)",
-                })
-            except:
-                pass
+        try:
+            recovered_state = await state_manager.recover_game_state(room_id, user_id)
+            if recovered_state:
+                try:
+                    # Player is reconnecting - send recovered state
+                    await websocket.send_json({
+                        "event": "state_recovered",
+                        "state": recovered_state,
+                        "message": "Game state recovered",
+                    })
+                    logger.info(f"✓ State recovered for user {user_id}")
+                except Exception as e:
+                    logger.error(f"Failed to send state_recovered: {e}")
+        except Exception as e:
+            logger.error(f"Error recovering state: {e}")
 
+        # Message loop - keep connection open
         try:
             while True:
                 try:
                     data = await websocket.receive_text()
-                    # Handle incoming messages from client if needed
-                    # (answer submissions, etc.)
                     if data:
-                        message = json.loads(data)
-                        # Process client messages here in future
-                        pass
-                except json.JSONDecodeError:
-                    continue
+                        try:
+                            message = json.loads(data)
+                            # Process client messages here in future
+                            pass
+                        except json.JSONDecodeError:
+                            continue
+                except Exception as e:
+                    logger.debug(f"Error receiving message: {e}")
+                    break
         except WebSocketDisconnect:
-            manager.disconnect(room_code, websocket, user_id)
-            await remove_player_from_redis(redis, room_id, user_id, username)
+            logger.info(f"User {user_id} disconnected from room {room_code}")
+        finally:
+            # Cleanup
+            try:
+                if username:
+                    manager.disconnect(room_code, websocket, user_id)
+                    await remove_player_from_redis(redis, room_id, user_id, username)
 
-            participants = await get_room_players_from_redis(redis, room_id)
-            await manager.broadcast(
-                room_code,
-                {
-                    "event": "player_left",
-                    "player": player,
-                    "participants": participants,
-                },
-            )
+                    participants = await get_room_players_from_redis(redis, room_id)
+                    await manager.broadcast(
+                        room_code,
+                        {
+                            "event": "player_left",
+                            "player": player,
+                            "participants": participants,
+                        },
+                    )
+            except Exception as e:
+                logger.error(f"Error during cleanup: {e}")
     except Exception as e:
-        print(f"WebSocket error for room {room_code}, user {user_id}: {e}")
-        manager.disconnect(room_code, websocket, user_id)
+        logger.error(f"Unexpected error in WebSocket handler: {e}", exc_info=True)
         try:
             await websocket.close()
         except:

@@ -14,6 +14,7 @@ interface GameplayQuestionProps {
   selectedOption: number | null;
   phase: "question" | "answer_reveal";
   isRecovering: boolean;
+  answeredUsers: Set<number>;
   onSelectOption: (optionId: number) => void;
 }
 
@@ -34,6 +35,7 @@ export function GameplayQuestion({
   selectedOption,
   phase,
   isRecovering,
+  answeredUsers,
   onSelectOption,
 }: GameplayQuestionProps) {
   const isLowTime = timeLeft <= maxTime * 0.25;
@@ -237,6 +239,9 @@ export function GameplayQuestion({
                 <h3 style={{ margin: "4px 0 0", fontSize: "1.1rem", color: "var(--text-primary)" }}>
                   Current standings
                 </h3>
+                <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)", marginTop: 6 }}>
+                  {answeredUsers.size} / {players.length} answered
+                </div>
               </div>
 
               <div className="leaderboard-list">
@@ -246,6 +251,7 @@ export function GameplayQuestion({
                     const username = player?.username || entry.username || `Player ${entry.user_id}`;
                     const rank = index + 1;
                     const rankLabel = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : `#${rank}`;
+                    const hasAnswered = answeredUsers.has(entry.user_id);
 
                     return (
                       <div
@@ -253,21 +259,28 @@ export function GameplayQuestion({
                         className="leaderboard-item"
                         style={{
                           background:
-                            rank === 1
-                              ? "linear-gradient(135deg, #fef3c7, #fde68a)"
-                              : rank === 2
-                                ? "linear-gradient(135deg, #f1f5f9, #e2e8f0)"
-                                : rank === 3
-                                  ? "linear-gradient(135deg, #fef3e8, #fed7aa)"
-                                  : "var(--surface-alt)",
-                          borderColor:
-                            rank === 1
+                            hasAnswered
+                              ? "linear-gradient(135deg, rgba(59, 130, 246, 0.08), rgba(37, 99, 235, 0.03))"
+                              : rank === 1
+                                ? "linear-gradient(135deg, #fef3c7, #fde68a)"
+                                : rank === 2
+                                  ? "linear-gradient(135deg, #f1f5f9, #e2e8f0)"
+                                  : rank === 3
+                                    ? "linear-gradient(135deg, #fef3e8, #fed7aa)"
+                                    : "var(--surface-alt)",
+                            borderColor: hasAnswered
+                            ? "rgba(59, 130, 246, 0.45)"
+                            : rank === 1
                               ? "#fcd34d"
                               : rank === 2
                                 ? "#cbd5e1"
                                 : rank === 3
                                   ? "#fdba74"
                                   : "transparent",
+                            borderWidth: hasAnswered ? "2px" : "1px",
+                          borderStyle: "solid",
+                            boxShadow: hasAnswered ? "0 0 0 1px rgba(59, 130, 246, 0.10), 0 0 18px rgba(59, 130, 246, 0.16)" : "none",
+                            transition: "border-color 0.2s ease, box-shadow 0.2s ease",
                         }}
                       >
                         <div className="leaderboard-score">
@@ -279,7 +292,9 @@ export function GameplayQuestion({
                           <div className="avatar avatar-sm" style={{ boxShadow: "none" }}>
                             {username.charAt(0).toUpperCase()}
                           </div>
-                          <div className="leaderboard-name">{username}</div>
+                          <div style={{ display: "flex", alignItems: "center", flex: 1 }}>
+                            <div className="leaderboard-name">{username}</div>
+                          </div>
                         </div>
 
                         <div style={{ marginLeft: "auto", fontWeight: 800, color: "var(--text-secondary)", fontSize: "0.85rem" }}>

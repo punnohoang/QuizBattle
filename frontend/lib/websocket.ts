@@ -12,6 +12,7 @@ export function useWebSocket(roomCode: string) {
     
     return {
         players: context.players,
+        userId: context.userId,
         isConnected: context.isConnected,
         sendEvent: context.sendEvent,
         disconnect: context.disconnect,

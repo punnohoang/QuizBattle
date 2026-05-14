@@ -2,10 +2,11 @@
 
 import React, { createContext, useContext, useEffect, useState, useRef, useCallback } from "react";
 import { getWsUrl } from "@/lib/api";
-import type { WSEvent, WSPlayer } from "@/lib/types";
+import type { QuestionResponse, WSEvent, WSPlayer } from "@/lib/types";
 
 interface WebSocketContextType {
   players: WSPlayer[];
+  userId: number | null;
   isConnected: boolean;
   lastMessage: WSEvent | null;
   gameState: {
@@ -29,6 +30,7 @@ export const WebSocketProvider: React.FC<{ roomCode: string; children: React.Rea
   children,
 }) => {
   const [players, setPlayers] = useState<WSPlayer[]>([]);
+  const [userId, setUserId] = useState<number | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [lastMessage, setLastMessage] = useState<WSEvent | null>(null);
   const [error, setError] = useState("");
@@ -76,6 +78,10 @@ export const WebSocketProvider: React.FC<{ roomCode: string; children: React.Rea
           const data: WSEvent = JSON.parse(event.data);
           setLastMessage(data);
 
+          if (data.event === "connection_ready" && data.user_id !== undefined) {
+            setUserId(Number(data.user_id));
+          }
+
           // Update internal state based on event type
           if (data.participants) {
             setPlayers(data.participants);
@@ -111,6 +117,7 @@ export const WebSocketProvider: React.FC<{ roomCode: string; children: React.Rea
                   question: state.question || null,
                   questionIndex: state.question_index ?? 0,
                   countdown: 3,
+                timeRemaining: state.time_remaining ?? state.duration ?? state.question?.time_limit ?? 20,
                   correctAnswer: null
               });
           }
@@ -167,6 +174,7 @@ export const WebSocketProvider: React.FC<{ roomCode: string; children: React.Rea
     <WebSocketContext.Provider
       value={{
         players,
+        userId,
         isConnected,
         lastMessage,
         gameState,

@@ -61,9 +61,10 @@ export default function PlayRoomPage({ params }: { params: Promise<{ code: strin
   const [questionNum, setQuestionNum] = useState(0);
   const [countdownVal, setCountdownVal] = useState(3);
   const [isRecovering, setIsRecovering] = useState(false);
-  const [userResults, setUserResults] = useState<Array<{ question_index: number; is_correct: boolean; score: number; content: string }>>([]);
+  const [userResults, setUserResults] = useState<{ question_index: number; is_correct: boolean; score: number; content: string }[]>([]);
+  const [answeredUsers, setAnsweredUsers] = useState<Set<number>>(new Set());
 
-  const { lastMessage, sendEvent, players: wsPlayers, isConnected, error: wsError, gameState } = useWebSocket(code);
+  const { lastMessage, sendEvent, players: wsPlayers, userId, isConnected, error: wsError, gameState } = useWebSocket(code);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const clearTimer = () => {
@@ -123,6 +124,7 @@ export default function PlayRoomPage({ params }: { params: Promise<{ code: strin
         const q = data.question;
         setQuestion(q);
         setSelectedOption(null);
+        setAnsweredUsers(new Set()); // Reset answered users for new question
         setPhase("question");
         const qIndex = data.question_index !== undefined ? data.question_index : questionNum;
         setQuestionNum(qIndex + 1);
@@ -177,19 +179,19 @@ export default function PlayRoomPage({ params }: { params: Promise<{ code: strin
           const result = data.result;
           
           // Update the question options immediately so we know what's correct
-          if (result.correct_option_ids) {
-            const correctIds = result.correct_option_ids.map(String);
-            setQuestion(prev => {
-              if (!prev) return prev;
-              return {
-                ...prev,
-                options: prev.options.map(opt => ({
-                  ...opt,
-                  is_correct: correctIds.includes(String(opt.id))
-                }))
-              };
-            });
-          }
+          // if (result.correct_option_ids) {
+          //   const correctIds = result.correct_option_ids.map(String);
+          //   setQuestion(prev => {
+          //     if (!prev) return prev;
+          //     return {
+          //       ...prev,
+          //       options: prev.options.map(opt => ({
+          //         ...opt,
+          //         is_correct: correctIds.includes(String(opt.id))
+          //       }))
+          //     };
+          //   });
+          // }
 
           setUserResults(prev => {
             if (prev.find(r => r.question_index === result.question_index)) return prev;
@@ -200,6 +202,13 @@ export default function PlayRoomPage({ params }: { params: Promise<{ code: strin
               content: question?.content || `Question ${result.question_index + 1}`
             }];
           });
+        }
+      }
+
+      // Track player answered event (broadcast to all players)
+      if (data.event === "player_answered") {
+        if (data.user_id !== undefined) {
+          setAnsweredUsers(prev => new Set([...prev, data.user_id]));
         }
       }
 
@@ -271,12 +280,14 @@ export default function PlayRoomPage({ params }: { params: Promise<{ code: strin
 
   // submit answer (can be before the time run out or after)
   const handleSelectOption = (optId: number) => {
-    if (phase !== "question" || selectedOption !== null) return;
+    if (phase !== "question" || selectedOption !== null || userId === null) return;
     setSelectedOption(optId);
     
     // Calculate time taken
     const timeTaken = maxTime - timeLeft;
     
+    setAnsweredUsers(prev => new Set([...prev, userId]));
+
     sendEvent({ 
       event: "submit_answer", 
       question_index: questionNum - 1,
@@ -545,6 +556,7 @@ export default function PlayRoomPage({ params }: { params: Promise<{ code: strin
           selectedOption={selectedOption}
           phase={phase}
           isRecovering={isRecovering}
+          answeredUsers={answeredUsers}
           onSelectOption={handleSelectOption}
         />
       </AuthGuard>

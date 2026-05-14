@@ -107,6 +107,7 @@ export interface WSEvent {
     | "player_joined"
     | "player_left"
     | "player_answered"
+    | "connection_ready"
     | "game_start"
     | "question"
     | "result"
@@ -122,6 +123,8 @@ export interface WSEvent {
     | "answer_result";
   player?: WSPlayer;
   participants?: WSPlayer[];
+  user_id?: number;
+  username?: string;
   // game events
   question?: QuestionResponse;
   scores?: Record<number, number>;
@@ -130,7 +133,6 @@ export interface WSEvent {
   countdown?: number;
   time_remaining?: number;
   correct_answer?: number[];
-  leaderboard?: any[];
   question_index?: number;
   success?: boolean;
   result?: any;

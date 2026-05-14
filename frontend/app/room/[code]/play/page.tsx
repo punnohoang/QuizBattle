@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import AuthGuard from "../../../components/AuthGuard";
 import { getWsUrl } from "../../../../lib/api";
 import { GameplayQuestion } from "../../../components/GameplayQuestion";
+import { useWebSocket } from "../../../../lib/websocket";
 import type { WSEvent, QuestionResponse, WSPlayer } from "../../../../lib/types";
 
 interface StateRecovery {
@@ -40,84 +41,116 @@ export default function PlayRoomPage({ params }: { params: Promise<{ code: strin
   const [isRecovering, setIsRecovering] = useState(false);
   const [userResults, setUserResults] = useState<Array<{ question_index: number; is_correct: boolean; score: number; content: string }>>([]);
 
-  const wsRef = useRef<WebSocket | null>(null);
+  const { lastMessage, sendEvent, players: wsPlayers, isConnected, error: wsError, gameState } = useWebSocket(code);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const clearTimer = () => {
     if (timerRef.current) clearInterval(timerRef.current);
   };
 
+  // Sync with shared game state on mount/update
   useEffect(() => {
-    if (!code) return;
+    if (gameState.phase !== "waiting") {
+      setPhase(gameState.phase as GamePhase);
+    }
+    if (gameState.question) {
+      setQuestion(gameState.question);
+      setQuestionNum(gameState.questionIndex + 1);
+      setMaxTime(gameState.question.time_limit || 20);
+      // Sync time left from shared state
+      setTimeLeft(gameState.timeRemaining);
+    }
+    if (gameState.countdown !== undefined && gameState.phase === "countdown") {
+      setCountdownVal(gameState.countdown);
+    }
+  }, [gameState]);
 
-    const socket = new WebSocket(getWsUrl(code));
-    wsRef.current = socket;
+  // Update players list from WS
+  useEffect(() => {
+    if (wsPlayers.length > 0) {
+      setPlayers(wsPlayers);
+    }
+  }, [wsPlayers]);
 
-    socket.onopen = () => setPhase("waiting");
+  // Handle errors from WS
+  useEffect(() => {
+    if (wsError) setError(wsError);
+  }, [wsError]);
 
-    socket.onmessage = (event) => {
-      try {
-        const data: WSEvent = JSON.parse(event.data);
+  // Handle incoming messages from shared WS
+  useEffect(() => {
+    if (!lastMessage) return;
+    
+    const data = lastMessage;
 
-        // Player join/leave events
-        if (data.event === "player_joined" || data.event === "player_left") {
-          if (data.participants) setPlayers(data.participants);
+    try {
+      // Game starting countdown (3-2-1)
+      if (data.event === "game_starting") {
+        setPhase("countdown");
+        if (data.countdown) setCountdownVal(data.countdown);
+      }
+
+      // Game started - ready for questions
+      if (data.event === "game_started") {
+        setPhase("waiting");
+      }
+
+      // New question - start fresh with timer
+      if (data.event === "question_start" && data.question) {
+        clearTimer();
+        const q = data.question;
+        setQuestion(q);
+        setSelectedOption(null);
+        setPhase("question");
+        const qIndex = data.question_index !== undefined ? data.question_index : questionNum;
+        setQuestionNum(qIndex + 1);
+        
+        const limit = q.time_limit ?? 20;
+        setMaxTime(limit);
+        setTimeLeft(limit);
+
+        // Optional: Local timer for smoothness, but will be corrected by question_timer events
+        timerRef.current = setInterval(() => {
+          setTimeLeft((t) => (t > 0 ? t - 1 : 0));
+        }, 1000);
+      }
+
+      // Timer tick from backend (Sync point)
+      if (data.event === "question_timer") {
+        if (data.time_remaining !== undefined) {
+          setTimeLeft(data.time_remaining);
         }
+      }
 
-        // Game starting countdown (3-2-1)
-        if (data.event === "game_starting") {
-          setPhase("countdown");
-          if (data.countdown) setCountdownVal(data.countdown);
+      // Question time up
+      if (data.event === "question_time_up") {
+        clearTimer();
+        setPhase("answer_reveal");
+        
+        // IMPORTANT: Update the options in current question to show correct/wrong
+        if (data.correct_answer && Array.isArray(data.correct_answer)) {
+          const correctIds = data.correct_answer.map(String);
+          setQuestion(prev => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              options: prev.options.map(opt => ({
+                ...opt,
+                is_correct: correctIds.includes(String(opt.id))
+              }))
+            };
+          });
         }
+      }
 
-        // Game started - ready for questions
-        if (data.event === "game_started") {
-          setPhase("waiting");
-        }
-
-        // New question - start fresh with timer
-        if (data.event === "question_start" && data.question) {
-          clearTimer();
-          const q = data.question;
-          setQuestion(q);
-          setSelectedOption(null);
-          setPhase("question");
-          if (typeof data.question_index === 'number') {
-            setQuestionNum(data.question_index + 1);
-          } else {
-            setQuestionNum((n: number) => n + 1);
-          }
-          const limit = q.time_limit ?? 20;
-          setMaxTime(limit);
-          setTimeLeft(limit);
-
-          timerRef.current = setInterval(() => {
-            setTimeLeft((t) => {
-              if (t <= 1) {
-                clearTimer();
-                setPhase("answer_reveal");
-                return 0;
-              }
-              return t - 1;
-            });
-          }, 1000);
-        }
-
-        // Timer tick from backend (overrides client timer for anti-F5)
-        if (data.event === "question_timer") {
-          if (data.time_remaining !== undefined) {
-            setTimeLeft(data.time_remaining);
-          }
-        }
-
-        // Question time up
-        if (data.event === "question_time_up") {
-          clearTimer();
-          setPhase("answer_reveal");
+      // Individual answer result (from backend)
+      if (data.event === "answer_result") {
+        if (data.success && data.result) {
+          const result = data.result;
           
-          // IMPORTANT: Update the options in current question to show correct/wrong
-          if (data.correct_answer && Array.isArray(data.correct_answer)) {
-            const correctIds = data.correct_answer.map(String);
+          // Update the question options immediately so we know what's correct
+          if (result.correct_option_ids) {
+            const correctIds = result.correct_option_ids.map(String);
             setQuestion(prev => {
               if (!prev) return prev;
               return {
@@ -130,152 +163,90 @@ export default function PlayRoomPage({ params }: { params: Promise<{ code: strin
             });
           }
 
-          // Update leaderboard if provided
-          if (data.leaderboard) {
-            // Live leaderboard update could go here
-          }
+          setUserResults(prev => {
+            if (prev.find(r => r.question_index === result.question_index)) return prev;
+            return [...prev, {
+              question_index: result.question_index,
+              is_correct: result.is_correct,
+              score: result.score,
+              content: question?.content || `Question ${result.question_index + 1}`
+            }];
+          });
         }
+      }
 
-        // Individual answer result (from backend)
-        if (data.event === "answer_result") {
-          if (data.success && data.result) {
-            const result = data.result;
-            
-            // Update the question options immediately so we know what's correct
-            if (result.correct_option_ids) {
-              const correctIds = result.correct_option_ids.map(String);
-              setQuestion(prev => {
-                if (!prev) return prev;
-                return {
-                  ...prev,
-                  options: prev.options.map(opt => ({
-                    ...opt,
-                    is_correct: correctIds.includes(String(opt.id))
-                  }))
-                };
-              });
+      // State recovery on reconnect (Anti-F5)
+      if (data.event === "state_recovered" && data.state) {
+        setIsRecovering(true);
+        const state = data.state;
+        
+        const recoveredQuestion = state.question;
+        const questionIndex = state.currentQuestion ?? state.question_index ?? 0;
+        const timeRemaining = state.time_remaining ?? state.duration ?? 20;
+
+        setQuestion(recoveredQuestion);
+        setQuestionNum(questionIndex + 1);
+        setPhase("question");
+        setMaxTime(recoveredQuestion.time_limit ?? 20);
+        setTimeLeft(timeRemaining);
+        setSelectedOption(null);
+
+        // Resume timer
+        clearTimer();
+        timerRef.current = setInterval(() => {
+          setTimeLeft((t) => {
+            if (t <= 1) {
+              clearTimer();
+              setPhase("answer_reveal");
+              return 0;
             }
+            return t - 1;
+          });
+        }, 1000);
 
-            setUserResults(prev => {
-              if (prev.find(r => r.question_index === result.question_index)) return prev;
-              return [...prev, {
-                question_index: result.question_index,
-                is_correct: result.is_correct,
-                score: result.score,
-                content: question?.content || `Question ${result.question_index + 1}`
-              }];
-            });
-          }
-        }
-
-        // State recovery on reconnect (Anti-F5)
-        if (data.event === "state_recovered" && data.state) {
-          setIsRecovering(true);
-          const state = data.state;
-          
-          // Align with new Key 5 structure
-          const question = state.question;
-          const questionIndex = state.currentQuestion ?? state.question_index ?? 0;
-          const timeRemaining = state.time_remaining ?? state.duration ?? 20;
-
-          setQuestion(question);
-          setQuestionNum(questionIndex + 1);
-          setPhase("question");
-          setMaxTime(question.time_limit ?? 20);
-          setTimeLeft(timeRemaining);
-          setSelectedOption(null);
-
-          // Resume timer
-          clearTimer();
-          timerRef.current = setInterval(() => {
-            setTimeLeft((t) => {
-              if (t <= 1) {
-                clearTimer();
-                setPhase("answer_reveal");
-                return 0;
-              }
-              return t - 1;
-            });
-          }, 1000);
-
-          setTimeout(() => setIsRecovering(false), 2000);
-        }
-
-        // Old "question" event fallback for compatibility
-        if (data.event === "question" && data.question) {
-          clearTimer();
-          const q = data.question;
-          setQuestion(q);
-          setSelectedOption(null);
-          setPhase("question");
-          if (typeof data.question_index === 'number') {
-            setQuestionNum(data.question_index + 1);
-          } else {
-            setQuestionNum((n: number) => n + 1);
-          }
-          const limit = q.time_limit ?? 20;
-          setMaxTime(limit);
-          setTimeLeft(limit);
-
-          timerRef.current = setInterval(() => {
-            setTimeLeft((t) => {
-              if (t <= 1) {
-                clearTimer();
-                setPhase("answer_reveal");
-                return 0;
-              }
-              return t - 1;
-            });
-          }, 1000);
-        }
-
-        if (data.event === "result") {
-          clearTimer();
-          setPhase("answer_reveal");
-          if (data.scores) {
-            const sorted = Object.entries(data.scores)
-              .map(([uid, score]) => {
-                const p = players.find((p) => p.user_id === Number(uid));
-                return { user_id: Number(uid), username: p?.username ?? `Player ${uid}`, score };
-              })
-              .sort((a, b) => b.score - a.score);
-            setScores(sorted);
-          }
-        }
-
-        if (data.event === "game_finished" || data.event === "game_end") {
-          clearTimer();
-          if (data.leaderboard) {
-            const sorted = data.leaderboard.map((entry: any) => {
-              const p = players.find((p) => p.user_id === entry.user_id);
-              return { 
-                user_id: entry.user_id, 
-                username: p?.username || `Player ${entry.user_id}`, 
-                score: entry.score 
-              };
-            }).sort((a: any, b: any) => b.score - a.score);
-            setScores(sorted);
-          }
-          setPhase("final");
-        }
-      } catch {
-        /* ignore parse errors */
+        setTimeout(() => setIsRecovering(false), 2000);
       }
-    };
 
-    socket.onclose = (e) => {
-      if (e.code === 1008) setError("Unauthorized or invalid room.");
-    };
-    socket.onerror = () => setError("WebSocket error occurred.");
-
-    return () => {
-      clearTimer();
-      if (socket.readyState === WebSocket.OPEN) {
-        socket.close();
+      if (data.event === "result") {
+        clearTimer();
+        setPhase("answer_reveal");
+        if (data.scores) {
+          const sorted = Object.entries(data.scores)
+            .map(([uid, score]) => {
+              const p = wsPlayers.find((p) => p.user_id === Number(uid));
+              return { user_id: Number(uid), username: p?.username ?? `Player ${uid}`, score: Number(score) };
+            })
+            .sort((a, b) => b.score - a.score);
+          setScores(sorted);
+        }
       }
-      wsRef.current = null;
-    };
-  }, [code]);
+
+      if (data.event === "game_finished" || data.event === "game_end") {
+        clearTimer();
+        if (data.leaderboard) {
+          const sorted = data.leaderboard.map((entry: any) => {
+            const p = wsPlayers.find((p) => p.user_id === entry.user_id);
+            return { 
+              user_id: entry.user_id, 
+              username: p?.username || `Player ${entry.user_id}`, 
+              score: entry.score 
+            };
+          }).sort((a: any, b: any) => b.score - a.score);
+          setScores(sorted);
+        }
+        setPhase("final");
+      }
+    } catch (err) {
+      console.error("Error processing WS message:", err);
+    }
+  }, [lastMessage, wsPlayers, questionNum, question?.content, maxTime]);
+
+  // Set phase to waiting when connected
+  useEffect(() => {
+    if (isConnected && phase === "connecting") {
+      setPhase("waiting");
+    }
+  }, [isConnected, phase]);
 
   const handleSelectOption = (optId: number) => {
     if (phase !== "question" || selectedOption !== null) return;
@@ -284,12 +255,12 @@ export default function PlayRoomPage({ params }: { params: Promise<{ code: strin
     // Calculate time taken
     const timeTaken = maxTime - timeLeft;
     
-    wsRef.current?.send(JSON.stringify({ 
+    sendEvent({ 
       event: "submit_answer", 
       question_index: questionNum - 1,
       selected_option_ids: [optId],
       time_taken: timeTaken
-    }));
+    });
   };
 
   /* ── ERROR ───────────────────────────────────── */

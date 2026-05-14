@@ -87,7 +87,7 @@ export default function WaitRoomPage({ params }: { params: Promise<{ code: strin
         // Game started successfully, wait for countdown and then redirect to play
         setTimeout(() => {
           router.push(`/room/${code}/play`);
-        }, 4000); // Wait for 3s countdown + 1s buffer
+        }, 3500); // Wait for 3s countdown + 0.5s buffer
       }
     } catch (err: any) {
       const errorMsg = err.response?.data?.detail || "Failed to start game";

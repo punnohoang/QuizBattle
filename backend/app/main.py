@@ -90,13 +90,15 @@ async def websocket_room(room_code: str, websocket: WebSocket):
     player = None
 
     try:
+        logger.info(f"🔌 Connection attempt for room: {room_code}")
         # Accept early so client doesn't see "closed before established"
         await websocket.accept()
 
         # Verify token
         user_id = await verify_ws_token(token)
+        logger.info(f"✅ Token verified for user: {user_id}")
     except HTTPException as e:
-        logger.warning(f"Invalid WebSocket token: {e.detail}")
+        logger.warning(f"❌ Invalid WebSocket token for room {room_code}: {e.detail}")
         try:
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         except:
@@ -106,7 +108,7 @@ async def websocket_room(room_code: str, websocket: WebSocket):
     # Get room ID
     room_id = await get_room_id_by_code(redis, room_code)
     if room_id is None:
-        logger.warning(f"Room not found: {room_code}")
+        logger.warning(f"❌ Room not found: {room_code}")
         try:
             await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
         except:
@@ -124,7 +126,7 @@ async def websocket_room(room_code: str, websocket: WebSocket):
 
         # Register connection (already accepted)
         await manager.connect(room_code, websocket, user_id)
-        logger.info(f"✓ User {user_id} ({username}) connected to room {room_code}")
+        logger.info(f"🚀 User {user_id} ({username}) connected to room {room_code}")
         
         # Add to Redis
         await add_player_to_redis(redis, room_id, user_id, username)

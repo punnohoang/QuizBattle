@@ -64,9 +64,9 @@ class QuizGameEngine:
             question_index = 0
             total_questions = await self.state_manager.get_total_questions(room_id)
 
-            # Initial delay before first question to align with 3-2-1 countdown
+            # Initial delay before first question to align with countdown and navigation
             if total_questions > 0:
-                await asyncio.sleep(3.5)
+                await asyncio.sleep(5.0)
 
             while question_index < total_questions:
                 # Get current question
@@ -273,11 +273,24 @@ class QuizGameEngine:
             
             # score = max_score * (1 - 0.5 * (time_used / time_limit))
             # time_used is time_taken
-            time_ratio = min(time_taken / time_limit, 1.0)
+            time_ratio = min(max(time_taken, 0) / time_limit, 1.0)
             score = int(max_score * (1 - 0.5 * time_ratio))
             
             # Min 200 points
             score = max(score, 200)
+            
+            # Log final score calculation
+            log_calc = (
+                f"--- SCORE CALC ---\n"
+                f"Time Taken: {time_taken}s / {time_limit}s\n"
+                f"Ratio: {time_ratio}\n"
+                f"Max Score: {max_score}\n"
+                f"Final Score: {score}\n"
+                f"------------------\n"
+            )
+            print(log_calc)
+            with open("scoring_debug.log", "a") as f:
+                f.write(log_calc)
 
         # 5. Update Leaderboard immediately
         if score > 0:

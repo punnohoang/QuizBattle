@@ -125,6 +125,7 @@ async def websocket_room(room_code: str, websocket: WebSocket):
                                     broadcast_callback=lambda msg: manager.broadcast(room_code, msg)
                                 )
                                 
+                            
                                 # Send confirmation/result back to player
                                 await websocket.send_json({
                                     "event": "answer_result",

@@ -96,14 +96,36 @@ export interface WSPlayer {
   username: string;
 }
 
+export interface LeaderboardEntry {
+  user_id: number;
+  score: number;
+  username?: string;
+}
+
 export interface WSEvent {
-  event: "player_joined" | "player_left" | "game_start" | "question" | "result" | "game_end"
-  | "game_starting" | "game_started" | "question_start" | "question_timer" | "question_time_up" | "state_recovered";
+  event:
+    | "player_joined"
+    | "player_left"
+    | "player_answered"
+    | "game_start"
+    | "question"
+    | "result"
+    | "game_end"
+    | "game_finished"
+    | "game_error"
+    | "game_starting"
+    | "game_started"
+    | "question_start"
+    | "question_timer"
+    | "question_time_up"
+    | "state_recovered"
+    | "answer_result";
   player?: WSPlayer;
   participants?: WSPlayer[];
   // game events
   question?: QuestionResponse;
   scores?: Record<number, number>;
+  leaderboard?: LeaderboardEntry[];
   // new timer events
   countdown?: number;
   time_remaining?: number;

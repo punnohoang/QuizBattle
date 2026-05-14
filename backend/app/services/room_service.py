@@ -96,6 +96,8 @@ class RoomService:
             detail="Unable to generate a unique room code. Please try again.",
         )
 
+    # get room access from redis (if not then from db) and check if user is host or not
+    # For the case when the host F5 at waiting room, we can still get the host_id from redis and determine the host status
     async def get_room_access(self, user_id: int, room_code: str) -> dict:
         redis_ops = RoomRedisManager(self.redis)
 

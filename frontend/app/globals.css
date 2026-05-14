@@ -387,6 +387,117 @@ select {
   border-color: var(--accent-light);
 }
 
+/* ─── Gameplay Leaderboard Layout ─────────────── */
+.gameplay-shell {
+  width: 100%;
+  display: flex;
+  gap: 24px;
+  position: relative;
+  /* padding: 0 24px 24px 24px; */
+}
+
+.gameplay-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.gameplay-content {
+  width: 100%;
+  max-width: calc(100vw - 368px);
+  margin: 0 auto;
+}
+
+.gameplay-sidebar {
+  width: 320px;
+  flex: 0 0 320px;
+  align-self: flex-start;
+  position: absolute;
+  top: 24px;
+  right: 24px;
+  bottom: 24px;
+  overflow-y: auto;
+  z-index: 10;
+}
+
+.leaderboard-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-sm);
+  padding: 1rem;
+}
+
+.leaderboard-list {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.leaderboard-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid transparent;
+}
+
+.leaderboard-score {
+  min-width: 70px;
+  text-align: left;
+  font-weight: 800;
+  color: var(--primary);
+}
+
+.leaderboard-avatar-stack {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 64px;
+}
+
+.leaderboard-name {
+  font-size: 0.78rem;
+  line-height: 1.2;
+  font-weight: 700;
+  color: var(--text-primary);
+  text-align: center;
+  word-break: break-word;
+}
+
+.leaderboard-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 160px;
+  padding: 18px;
+  border-radius: 14px;
+  background: var(--surface-alt);
+  border: 1px dashed var(--border);
+}
+
+@media (max-width: 1024px) {
+  .gameplay-shell {
+    flex-direction: column;
+  }
+
+  .gameplay-content {
+    max-width: 100%;
+  }
+
+  .gameplay-sidebar {
+    width: 100%;
+    flex-basis: auto;
+    position: static;
+    inset: auto;
+    overflow: visible;
+  }
+}
+
 /* ─── Badges ─────────────────────────────────────── */
 .badge {
   display: inline-flex;

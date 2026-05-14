@@ -17,7 +17,7 @@ class QuizGameEngine:
         self.redis = redis
         self.db = db
         self.state_manager = GameStateManager(redis, db)
-        self._game_tasks: dict[int, asyncio.Task] = {}  # room_id -> task
+        self._game_tasks: dict[int, asyncio.Task] = {}  # room_id -> task (each room handle by individual task - handle game events )
 
     async def start_question_loop(
         self,
@@ -216,14 +216,14 @@ class QuizGameEngine:
         # DEBUG LOGGING (optional pre-processing log)
         print(f"SUBMIT: room={room_id} user={user_id} q_idx={question_index} selected={selected_option_ids}")
 
-        # 1. Ensure only first answer is accepted
+        # 1. Ensure only one answer is accepted (acp first time, ignore duplicates)
         answered_key = f"quiz-room:{room_id}:answered:{question_index}"
         is_new = await self.state_manager.redis.sadd(answered_key, str(user_id))
         if not is_new:
             return {"error": "Already answered this question"}
         await self.state_manager.redis.expire(answered_key, 3600)
 
-        # 2. Get question
+        # 2. Get current question (at submit time point)
         question = await self.state_manager.get_question_by_index(room_id, question_index)
         if not question:
             return {"error": "Question not found"}
@@ -242,7 +242,9 @@ class QuizGameEngine:
             if is_opt_correct(opt)
         ]
         user_selected_ids = [int(oid) for oid in selected_option_ids]
-        is_correct = set(user_selected_ids) == set(correct_option_ids)
+        
+        # FUTURE IMPROVEMENT: A QUESTION CAN HAVE MULTIPLE CORRECT OPTS.
+        is_correct = set(user_selected_ids) == set(correct_option_ids) 
 
         # DEBUG LOGGING (Integrated into app directory for better visibility)
         try:

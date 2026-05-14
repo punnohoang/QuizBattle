@@ -47,6 +47,7 @@ export default function WaitRoomPage({ params }: { params: Promise<{ code: strin
     return () => ws.removeEventListener("message", handleMessage);
   }, [ws, isHost, code, router]);
 
+  // Check room access and host status when join room
   useEffect(() => {
     let cancelled = false;
 

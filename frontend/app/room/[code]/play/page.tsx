@@ -24,6 +24,28 @@ interface Score {
   score: number;
 }
 
+const buildLeaderboardRows = (
+  entries: Array<{ user_id: number; score: number; username?: string }> = [],
+  roomPlayers: WSPlayer[] = [],
+) => {
+  const scoreByUser = new Map(entries.map((entry) => [entry.user_id, Number(entry.score) || 0]));
+  const usernameByUser = new Map(entries.filter((entry) => entry.username).map((entry) => [entry.user_id, entry.username as string]));
+
+  const rows = roomPlayers.length > 0
+    ? roomPlayers.map((player) => ({
+        user_id: player.user_id,
+        username: usernameByUser.get(player.user_id) ?? player.username,
+        score: scoreByUser.get(player.user_id) ?? 0,
+      }))
+    : entries.map((entry) => ({
+        user_id: entry.user_id,
+        username: entry.username ?? `Player ${entry.user_id}`,
+        score: Number(entry.score) || 0,
+      }));
+
+  return rows.sort((a, b) => b.score - a.score);
+};
+
 export default function PlayRoomPage({ params }: { params: Promise<{ code: string }> }) {
   const router = useRouter();
   const { code } = use(params);
@@ -77,25 +99,25 @@ export default function PlayRoomPage({ params }: { params: Promise<{ code: strin
     if (wsError) setError(wsError);
   }, [wsError]);
 
-  // Handle incoming messages from shared WS
+  // Handle incoming messages from shared WS - GAME EVENTS (SUBMIT ANSWER, WAIT FOR HOST TO START, COUNTDOWN, NEW QUESTION, TIMER TICK, ANSWER REVEAL, FINAL LEADERBOARD....)
   useEffect(() => {
     if (!lastMessage) return;
     
     const data = lastMessage;
 
     try {
-      // Game starting countdown (3-2-1)
+      //1. Game starting countdown (3-2-1) - when host clicks start, all players need countdown
       if (data.event === "game_starting") {
         setPhase("countdown");
         if (data.countdown) setCountdownVal(data.countdown);
       }
 
-      // Game started - ready for questions
+      //2. Game started - ready for questions to come in (players perspective)
       if (data.event === "game_started") {
         setPhase("waiting");
       }
 
-      // New question - start fresh with timer
+      //3. New question come in - start fresh with timer for that question
       if (data.event === "question_start" && data.question) {
         clearTimer();
         const q = data.question;
@@ -115,17 +137,21 @@ export default function PlayRoomPage({ params }: { params: Promise<{ code: strin
         }, 1000);
       }
 
-      // Timer tick from backend (Sync point)
+      //4. Timer tick from backend (Sync point)
       if (data.event === "question_timer") {
         if (data.time_remaining !== undefined) {
           setTimeLeft(data.time_remaining);
         }
       }
 
-      // Question time up
+      //5. Question time up (leaderboard update + show correct answer to players)
       if (data.event === "question_time_up") {
         clearTimer();
         setPhase("answer_reveal");
+
+        if (data.leaderboard) {
+          setScores(buildLeaderboardRows(data.leaderboard, wsPlayers));
+        }
         
         // IMPORTANT: Update the options in current question to show correct/wrong
         if (data.correct_answer && Array.isArray(data.correct_answer)) {
@@ -143,6 +169,8 @@ export default function PlayRoomPage({ params }: { params: Promise<{ code: strin
         }
       }
 
+      // thực ra luồng của answer_reveal là đã cập nhật kết quả rồi
+      // NO NEED FOR NOW ? ALL PLAYERS WILL GET THE ANSWER AT THE SAME TIME (question_time_up)
       // Individual answer result (from backend)
       if (data.event === "answer_result") {
         if (data.success && data.result) {
@@ -207,6 +235,7 @@ export default function PlayRoomPage({ params }: { params: Promise<{ code: strin
         setTimeout(() => setIsRecovering(false), 2000);
       }
 
+      // NOT USE YET
       if (data.event === "result") {
         clearTimer();
         setPhase("answer_reveal");
@@ -224,15 +253,7 @@ export default function PlayRoomPage({ params }: { params: Promise<{ code: strin
       if (data.event === "game_finished" || data.event === "game_end") {
         clearTimer();
         if (data.leaderboard) {
-          const sorted = data.leaderboard.map((entry: any) => {
-            const p = wsPlayers.find((p) => p.user_id === entry.user_id);
-            return { 
-              user_id: entry.user_id, 
-              username: p?.username || `Player ${entry.user_id}`, 
-              score: entry.score 
-            };
-          }).sort((a: any, b: any) => b.score - a.score);
-          setScores(sorted);
+          setScores(buildLeaderboardRows(data.leaderboard, wsPlayers));
         }
         setPhase("final");
       }
@@ -248,6 +269,7 @@ export default function PlayRoomPage({ params }: { params: Promise<{ code: strin
     }
   }, [isConnected, phase]);
 
+  // submit answer (can be before the time run out or after)
   const handleSelectOption = (optId: number) => {
     if (phase !== "question" || selectedOption !== null) return;
     setSelectedOption(optId);
@@ -262,6 +284,8 @@ export default function PlayRoomPage({ params }: { params: Promise<{ code: strin
       time_taken: timeTaken
     });
   };
+
+  const finalLeaderboard = buildLeaderboardRows(scores, wsPlayers);
 
   /* ── ERROR ───────────────────────────────────── */
   if (error) {
@@ -301,7 +325,7 @@ export default function PlayRoomPage({ params }: { params: Promise<{ code: strin
 
             <div className="card" style={{ padding: "1.5rem" }}>
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                {scores.map((s, i) => (
+                {finalLeaderboard.map((s, i) => (
                   <div
                     key={s.user_id}
                     style={{
@@ -349,7 +373,7 @@ export default function PlayRoomPage({ params }: { params: Promise<{ code: strin
                     </div>
                   </div>
                 ))}
-                {scores.length === 0 && (
+                {finalLeaderboard.length === 0 && (
                    <p style={{ textAlign: "center", color: "var(--text-muted)", padding: 24 }}>
                      No scores recorded.
                    </p>
@@ -359,7 +383,7 @@ export default function PlayRoomPage({ params }: { params: Promise<{ code: strin
 
             {/* Personal Scorecard */}
             {userResults.length > 0 && (
-              <div style={{ marginTop: 40 }} className="animate-slideInUp" style={{ animationDelay: '0.2s' }}>
+              <div className="animate-slideInUp" style={{ marginTop: 40, animationDelay: '0.2s' }}>
                 <h3 style={{ fontSize: "1.25rem", fontWeight: 700, color: "var(--text-primary)", marginBottom: 16, textAlign: 'center' }}>
                   Your Performance
                 </h3>
@@ -517,6 +541,7 @@ export default function PlayRoomPage({ params }: { params: Promise<{ code: strin
           timeLeft={timeLeft}
           maxTime={maxTime}
           players={players}
+          leaderboard={scores}
           selectedOption={selectedOption}
           phase={phase}
           isRecovering={isRecovering}

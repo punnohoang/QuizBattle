@@ -1,8 +1,65 @@
 "use client";
 
 import type { LeaderboardEntry, QuestionResponse, WSPlayer } from "@/lib/types";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { CountdownTimer } from "./CountdownTimer";
 import { AnswerOptions } from "./AnswerOptions";
+
+function AnimatedScoreValue({ value }: { value: number }) {
+  const [displayValue, setDisplayValue] = useState(value);
+  const [scale, setScale] = useState(1);
+  const currentValueRef = useRef(value);
+
+  useEffect(() => {
+    const fromValue = currentValueRef.current;
+    const toValue = value;
+
+    if (fromValue === toValue) {
+      return;
+    }
+
+    if (toValue > fromValue) {
+      setScale(1.08);
+      requestAnimationFrame(() => setScale(1));
+    }
+
+    let rafId = 0;
+    const duration = Math.min(900, Math.max(350, Math.abs(toValue - fromValue) * 18));
+    const startTime = performance.now();
+
+    const animate = (now: number) => {
+      const progress = Math.min((now - startTime) / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const nextValue = Math.round(fromValue + (toValue - fromValue) * eased);
+
+      setDisplayValue(nextValue);
+      currentValueRef.current = nextValue;
+
+      if (progress < 1) {
+        rafId = requestAnimationFrame(animate);
+      } else {
+        currentValueRef.current = toValue;
+      }
+    };
+
+    rafId = requestAnimationFrame(animate);
+
+    return () => cancelAnimationFrame(rafId);
+  }, [value]);
+
+  return (
+    <span
+      style={{
+        display: "inline-block",
+        transform: `scale(${scale})`,
+        transformOrigin: "center",
+        transition: "transform 180ms cubic-bezier(0.2, 1.2, 0.4, 1)",
+      }}
+    >
+      {displayValue.toLocaleString()}
+    </span>
+  );
+}
 
 interface GameplayQuestionProps {
   question: QuestionResponse;
@@ -39,6 +96,9 @@ export function GameplayQuestion({
   onSelectOption,
 }: GameplayQuestionProps) {
   const isLowTime = timeLeft <= maxTime * 0.25;
+  const itemRefs = useRef(new Map<number, HTMLDivElement | null>());
+  const previousRects = useRef(new Map<number, DOMRect>());
+
   const scoreByUser = new Map(leaderboard.map((entry) => [entry.user_id, Number(entry.score) || 0]));
   const leaderboardRows = players.length > 0
     ? players.map((player) => ({
@@ -47,6 +107,37 @@ export function GameplayQuestion({
         score: scoreByUser.get(player.user_id) ?? 0,
       })).sort((a, b) => b.score - a.score)
     : [...leaderboard].sort((a, b) => b.score - a.score);
+
+  useLayoutEffect(() => {
+    const nextRects = new Map<number, DOMRect>();
+
+    leaderboardRows.forEach((entry) => {
+      const node = itemRefs.current.get(entry.user_id);
+      if (!node) return;
+
+      const nextRect = node.getBoundingClientRect();
+      const previousRect = previousRects.current.get(entry.user_id);
+
+      if (previousRect) {
+        const deltaY = previousRect.top - nextRect.top;
+        if (deltaY !== 0) {
+          node.style.transition = "none";
+          node.style.transform = `translateY(${deltaY}px)`;
+          node.style.zIndex = "1";
+
+          requestAnimationFrame(() => {
+            node.style.transition = "transform 800ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 800ms cubic-bezier(0.22, 1, 0.36, 1)";
+            node.style.transform = "translateY(0)";
+            node.style.zIndex = "";
+          });
+        }
+      }
+
+      nextRects.set(entry.user_id, nextRect);
+    });
+
+    previousRects.current = nextRects;
+  }, [leaderboardRows]);
 
   return (<div
       style={{
@@ -257,7 +348,11 @@ export function GameplayQuestion({
                       <div
                         key={entry.user_id}
                         className="leaderboard-item"
+                        ref={(node) => {
+                          itemRefs.current.set(entry.user_id, node);
+                        }}
                         style={{
+                          willChange: "transform",
                           background:
                             hasAnswered
                               ? "linear-gradient(135deg, rgba(59, 130, 246, 0.08), rgba(37, 99, 235, 0.03))"
@@ -284,7 +379,9 @@ export function GameplayQuestion({
                         }}
                       >
                         <div className="leaderboard-score">
-                          <div style={{ fontSize: "1.05rem", lineHeight: 1 }}>{entry.score.toLocaleString()}</div>
+                          <div style={{ fontSize: "1.05rem", lineHeight: 1 }}>
+                            <AnimatedScoreValue value={entry.score} />
+                          </div>
                           <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 700 }}>PTS</div>
                         </div>
 

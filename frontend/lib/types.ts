@@ -107,12 +107,11 @@ export interface WSEvent {
   // new timer events
   countdown?: number;
   time_remaining?: number;
-  // state recovery
-  state?: {
-    question_index: number;
-    question: QuestionResponse;
-    time_remaining: number;
-    is_answered: boolean;
-    snapshot_at: string;
-  };
+  correct_answer?: number[];
+  leaderboard?: any[];
+  question_index?: number;
+  success?: boolean;
+  result?: any;
+  message?: string;
+  state?: any;
 }

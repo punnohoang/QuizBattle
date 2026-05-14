@@ -186,7 +186,8 @@ class RoomRedisManager:
     async def get_leaderboard(self, room_id: int, limit: int = 50) -> list[dict]:
         """Get top users on leaderboard (highest score first)."""
         key = get_leaderboard_key(room_id)
-        results = await self.redis.zrange(key, 0, limit - 1, byscore=False, rev=True, withscores=True)
+        # Use zrevrange for compatibility across redis-py versions
+        results = await self.redis.zrevrange(key, 0, limit - 1, withscores=True)
         leaderboard = []
         for user_id, score in results:
             leaderboard.append({"user_id": int(user_id), "score": int(score)})

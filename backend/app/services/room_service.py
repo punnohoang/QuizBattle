@@ -12,10 +12,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.models import GameSession, Quiz
 from app.schemas.room import RoomCreateRequest
 from app.core.redis_keys import (
-    ROOM_CODE_KEY_PREFIX,
-    ROOM_STATE_KEY_TEMPLATE,
     get_room_state_key,
     get_questions_key,
+    get_room_code_key,
 )
 from app.core.redis_ops import RoomRedisManager
 
@@ -33,7 +32,7 @@ class RoomService:
     async def create_room(self, user_id: int, payload: RoomCreateRequest) -> GameSession:
         quiz = await self._get_quiz_for_user(user_id, payload.quiz_id)
         room_code = await self._generate_unique_room_code()
-        room_code_key = f"{ROOM_CODE_KEY_PREFIX}{room_code}"
+        room_code_key = get_room_code_key(room_code)
 
         session = GameSession(
             host_id=user_id,
@@ -87,7 +86,7 @@ class RoomService:
     async def _generate_unique_room_code(self) -> str:
         for _ in range(MAX_CODE_GENERATION_ATTEMPTS):
             room_code = self._generate_code()
-            room_code_key = f"{ROOM_CODE_KEY_PREFIX}{room_code}"
+            room_code_key = get_room_code_key(room_code)
             created = await self.redis.set(room_code_key, "1", nx=True)
             if created:
                 return room_code
@@ -100,7 +99,8 @@ class RoomService:
     async def get_room_access(self, user_id: int, room_code: str) -> dict:
         redis_ops = RoomRedisManager(self.redis)
 
-        room_id = await self.redis.get(f"{ROOM_CODE_KEY_PREFIX}{room_code}")
+        room_key = get_room_code_key(room_code)
+        room_id = await self.redis.get(room_key)
         if room_id:
             room_id_int = int(room_id)
             host_id = await redis_ops.get_room_host_id(room_id_int)
@@ -134,7 +134,8 @@ class RoomService:
         Only the host can start the game.
         """
         # Get room ID from Redis
-        room_id_value = await self.redis.get(f"{ROOM_CODE_KEY_PREFIX}{room_code}")
+        room_key = get_room_code_key(room_code)
+        room_id_value = await self.redis.get(room_key)
         if not room_id_value:
             raise HTTPException(status_code=404, detail="Room not found")
         

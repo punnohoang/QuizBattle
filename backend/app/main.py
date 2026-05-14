@@ -18,6 +18,7 @@ from app.services.websocket_manager import (
     verify_ws_token,
 )
 from app.services.game_state_manager import GameStateManager
+from app.services.quiz_game_engine import get_game_engine
 
 logger = logging.getLogger(__name__)
 
@@ -165,8 +166,34 @@ async def websocket_room(room_code: str, websocket: WebSocket):
                     if data:
                         try:
                             message = json.loads(data)
-                            # Process client messages here in future
-                            pass
+                            
+                            # Process submit_answer event
+                            if message.get("event") == "submit_answer":
+                                engine = await get_game_engine(redis, db)
+                                q_index = message.get("question_index")
+                                opt_ids = message.get("selected_option_ids", [])
+                                time_taken = message.get("time_taken", 0)
+                                
+                                result = await engine.submit_answer(
+                                    room_id=room_id,
+                                    user_id=user_id,
+                                    question_index=q_index,
+                                    selected_option_ids=opt_ids,
+                                    time_taken=time_taken,
+                                    broadcast_callback=lambda msg: manager.broadcast(room_code, msg)
+                                )
+                                
+                                # Send confirmation/result back to player
+                                await websocket.send_json({
+                                    "event": "answer_result",
+                                    "success": "error" not in result,
+                                    "result": {
+                                        "question_index": q_index,
+                                        "is_correct": result.get("is_correct", False),
+                                        "score": result.get("score", 0),
+                                        "correct_option_ids": result.get("correct_option_ids", []),
+                                    }
+                                })
                         except json.JSONDecodeError:
                             continue
                 except Exception as e:

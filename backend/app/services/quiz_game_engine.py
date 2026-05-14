@@ -64,6 +64,10 @@ class QuizGameEngine:
             question_index = 0
             total_questions = await self.state_manager.get_total_questions(room_id)
 
+            # Initial delay before first question to align with 3-2-1 countdown
+            if total_questions > 0:
+                await asyncio.sleep(3.5)
+
             while question_index < total_questions:
                 # Get current question
                 question = await self.state_manager.get_question_by_index(room_id, question_index)

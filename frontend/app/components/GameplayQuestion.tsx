@@ -43,6 +43,8 @@ export function GameplayQuestion({
         background: "var(--background)",
         display: "flex",
         flexDirection: "column",
+        position: "relative",
+        overflow: "hidden",
       }}
     >
       {/* ────── TOP BAR ────────────────────────── */}

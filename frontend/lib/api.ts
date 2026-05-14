@@ -138,6 +138,11 @@ export const roomApi = {
 export const getWsUrl = (roomCode: string) => {
   const token =
     typeof window !== "undefined" ? localStorage.getItem("access_token") : "";
+  
+  // Use the established BASE_URL but switch to ws/wss protocol
   const wsBase = BASE_URL.replace(/^http/, "ws");
-  return `${wsBase}/ws/room/${roomCode}?token=${token}`;
+  
+  const url = `${wsBase}/ws/room/${roomCode}?token=${encodeURIComponent(token || "")}`;
+  console.log("🔗 [API] WS URL:", url.split('?')[0] + "?token=***");
+  return url;
 };

@@ -7,8 +7,7 @@ from app.core.security import verify_token
 from app.db import AsyncSessionLocal
 from app.core.cache import get_redis
 from app.models import User
-from app.services.room_service import ROOM_CODE_KEY_PREFIX
-from app.core.redis_keys import get_players_key
+from app.core.redis_keys import get_players_key, get_room_code_key
 from app.core.redis_ops import RoomRedisManager
 
 
@@ -91,7 +90,7 @@ async def verify_ws_token(token: str) -> int:
 
 async def get_room_id_by_code(redis: Redis, room_code: str) -> int | None:
     """Resolve a room code to a room ID via Redis."""
-    room_key = f"{ROOM_CODE_KEY_PREFIX}{room_code}"
+    room_key = get_room_code_key(room_code)
     room_id = await redis.get(room_key)
     return int(room_id) if room_id else None
 

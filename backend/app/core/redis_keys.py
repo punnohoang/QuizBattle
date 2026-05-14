@@ -18,14 +18,14 @@ def get_room_state_key(room_id: int) -> str:
 
 # 3. Player list in room
 def get_players_key(room_id: int) -> str:
-    """quiz-room:{idRoom}:players (Set, TTL: 24h)"""
-    return f"quiz-room:{room_id}:players"
+    """quiz-room:{idRoom}:player (Set, TTL: 24h)"""
+    return f"quiz-room:{room_id}:player"
 
 
-# 4. Room code generation lock
-def get_room_code_lock_key(room_id: int) -> str:
-    """quiz-room:{idRoom}:code (String/SETNX, TTL: 10s)"""
-    return f"quiz-room:{room_id}:code"
+# 4. Room code mapping and lock
+def get_room_code_key(room_code: str) -> str:
+    """quiz-room:code:{code} (String, TTL: 24h)"""
+    return f"quiz-room:code:{room_code}"
 
 
 # 5. Current question marker for user

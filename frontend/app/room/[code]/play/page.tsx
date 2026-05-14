@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import AuthGuard from "../../../components/AuthGuard";
 import { getWsUrl } from "../../../../lib/api";
 import { GameplayQuestion } from "../../../components/GameplayQuestion";
+import { useWebSocket } from "../../../../lib/websocket";
 import type { WSEvent, QuestionResponse, WSPlayer } from "../../../../lib/types";
 
 interface StateRecovery {
@@ -38,171 +39,228 @@ export default function PlayRoomPage({ params }: { params: Promise<{ code: strin
   const [questionNum, setQuestionNum] = useState(0);
   const [countdownVal, setCountdownVal] = useState(3);
   const [isRecovering, setIsRecovering] = useState(false);
+  const [userResults, setUserResults] = useState<Array<{ question_index: number; is_correct: boolean; score: number; content: string }>>([]);
 
-  const wsRef = useRef<WebSocket | null>(null);
+  const { lastMessage, sendEvent, players: wsPlayers, isConnected, error: wsError, gameState } = useWebSocket(code);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   const clearTimer = () => {
     if (timerRef.current) clearInterval(timerRef.current);
   };
 
+  // Sync with shared game state on mount/update
   useEffect(() => {
-    if (!code) return;
+    if (gameState.phase !== "waiting") {
+      setPhase(gameState.phase as GamePhase);
+    }
+    if (gameState.question) {
+      setQuestion(gameState.question);
+      setQuestionNum(gameState.questionIndex + 1);
+      setMaxTime(gameState.question.time_limit || 20);
+      // Sync time left from shared state
+      setTimeLeft(gameState.timeRemaining);
+    }
+    if (gameState.countdown !== undefined && gameState.phase === "countdown") {
+      setCountdownVal(gameState.countdown);
+    }
+  }, [gameState]);
 
-    const socket = new WebSocket(getWsUrl(code));
-    wsRef.current = socket;
+  // Update players list from WS
+  useEffect(() => {
+    if (wsPlayers.length > 0) {
+      setPlayers(wsPlayers);
+    }
+  }, [wsPlayers]);
 
-    socket.onopen = () => setPhase("waiting");
+  // Handle errors from WS
+  useEffect(() => {
+    if (wsError) setError(wsError);
+  }, [wsError]);
 
-    socket.onmessage = (event) => {
-      try {
-        const data: WSEvent = JSON.parse(event.data);
+  // Handle incoming messages from shared WS
+  useEffect(() => {
+    if (!lastMessage) return;
+    
+    const data = lastMessage;
 
-        // Player join/leave events
-        if (data.event === "player_joined" || data.event === "player_left") {
-          if (data.participants) setPlayers(data.participants);
-        }
-
-        // Game starting countdown (3-2-1)
-        if (data.event === "game_starting") {
-          setPhase("countdown");
-          if (data.countdown) setCountdownVal(data.countdown);
-        }
-
-        // Game started - ready for questions
-        if (data.event === "game_started") {
-          setPhase("waiting");
-        }
-
-        // New question - start fresh with timer
-        if (data.event === "question_start" && data.question) {
-          clearTimer();
-          const q = data.question;
-          setQuestion(q);
-          setSelectedOption(null);
-          setPhase("question");
-          setQuestionNum((n) => n + 1);
-          const limit = q.time_limit ?? 20;
-          setMaxTime(limit);
-          setTimeLeft(limit);
-
-          timerRef.current = setInterval(() => {
-            setTimeLeft((t) => {
-              if (t <= 1) {
-                clearTimer();
-                setPhase("answer_reveal");
-                return 0;
-              }
-              return t - 1;
-            });
-          }, 1000);
-        }
-
-        // Timer tick from backend (overrides client timer for anti-F5)
-        if (data.event === "question_timer") {
-          if (data.time_remaining !== undefined) {
-            setTimeLeft(data.time_remaining);
-          }
-        }
-
-        // Question time up
-        if (data.event === "question_time_up") {
-          clearTimer();
-          setPhase("answer_reveal");
-        }
-
-        // State recovery on reconnect (Anti-F5)
-        if (data.event === "state_recovered" && data.state) {
-          setIsRecovering(true);
-          const state: StateRecovery = data.state;
-          setQuestion(state.question);
-          setQuestionNum(state.question_index + 1);
-          setPhase("question");
-          setMaxTime(state.question.time_limit ?? 20);
-          setTimeLeft(state.time_remaining);
-          setSelectedOption(null);
-
-          // Resume timer
-          clearTimer();
-          timerRef.current = setInterval(() => {
-            setTimeLeft((t) => {
-              if (t <= 1) {
-                clearTimer();
-                setPhase("answer_reveal");
-                return 0;
-              }
-              return t - 1;
-            });
-          }, 1000);
-
-          setTimeout(() => setIsRecovering(false), 2000);
-        }
-
-        // Old "question" event fallback for compatibility
-        if (data.event === "question" && data.question) {
-          clearTimer();
-          const q = data.question;
-          setQuestion(q);
-          setSelectedOption(null);
-          setPhase("question");
-          setQuestionNum((n) => n + 1);
-          const limit = q.time_limit ?? 20;
-          setMaxTime(limit);
-          setTimeLeft(limit);
-
-          timerRef.current = setInterval(() => {
-            setTimeLeft((t) => {
-              if (t <= 1) {
-                clearTimer();
-                setPhase("answer_reveal");
-                return 0;
-              }
-              return t - 1;
-            });
-          }, 1000);
-        }
-
-        if (data.event === "result") {
-          clearTimer();
-          setPhase("answer_reveal");
-          if (data.scores) {
-            const sorted = Object.entries(data.scores)
-              .map(([uid, score]) => {
-                const p = players.find((p) => p.user_id === Number(uid));
-                return { user_id: Number(uid), username: p?.username ?? `Player ${uid}`, score };
-              })
-              .sort((a, b) => b.score - a.score);
-            setScores(sorted);
-          }
-        }
-
-        if (data.event === "game_end") {
-          clearTimer();
-          setPhase("final");
-        }
-      } catch {
-        /* ignore parse errors */
+    try {
+      // Game starting countdown (3-2-1)
+      if (data.event === "game_starting") {
+        setPhase("countdown");
+        if (data.countdown) setCountdownVal(data.countdown);
       }
-    };
 
-    socket.onclose = (e) => {
-      if (e.code === 1008) setError("Unauthorized or invalid room.");
-    };
-    socket.onerror = () => setError("WebSocket error occurred.");
-
-    return () => {
-      clearTimer();
-      if (socket.readyState === WebSocket.OPEN) {
-        socket.close();
+      // Game started - ready for questions
+      if (data.event === "game_started") {
+        setPhase("waiting");
       }
-      wsRef.current = null;
-    };
-  }, [code]);
+
+      // New question - start fresh with timer
+      if (data.event === "question_start" && data.question) {
+        clearTimer();
+        const q = data.question;
+        setQuestion(q);
+        setSelectedOption(null);
+        setPhase("question");
+        const qIndex = data.question_index !== undefined ? data.question_index : questionNum;
+        setQuestionNum(qIndex + 1);
+        
+        const limit = q.time_limit ?? 20;
+        setMaxTime(limit);
+        setTimeLeft(limit);
+
+        // Optional: Local timer for smoothness, but will be corrected by question_timer events
+        timerRef.current = setInterval(() => {
+          setTimeLeft((t) => (t > 0 ? t - 1 : 0));
+        }, 1000);
+      }
+
+      // Timer tick from backend (Sync point)
+      if (data.event === "question_timer") {
+        if (data.time_remaining !== undefined) {
+          setTimeLeft(data.time_remaining);
+        }
+      }
+
+      // Question time up
+      if (data.event === "question_time_up") {
+        clearTimer();
+        setPhase("answer_reveal");
+        
+        // IMPORTANT: Update the options in current question to show correct/wrong
+        if (data.correct_answer && Array.isArray(data.correct_answer)) {
+          const correctIds = data.correct_answer.map(String);
+          setQuestion(prev => {
+            if (!prev) return prev;
+            return {
+              ...prev,
+              options: prev.options.map(opt => ({
+                ...opt,
+                is_correct: correctIds.includes(String(opt.id))
+              }))
+            };
+          });
+        }
+      }
+
+      // Individual answer result (from backend)
+      if (data.event === "answer_result") {
+        if (data.success && data.result) {
+          const result = data.result;
+          
+          // Update the question options immediately so we know what's correct
+          if (result.correct_option_ids) {
+            const correctIds = result.correct_option_ids.map(String);
+            setQuestion(prev => {
+              if (!prev) return prev;
+              return {
+                ...prev,
+                options: prev.options.map(opt => ({
+                  ...opt,
+                  is_correct: correctIds.includes(String(opt.id))
+                }))
+              };
+            });
+          }
+
+          setUserResults(prev => {
+            if (prev.find(r => r.question_index === result.question_index)) return prev;
+            return [...prev, {
+              question_index: result.question_index,
+              is_correct: result.is_correct,
+              score: result.score,
+              content: question?.content || `Question ${result.question_index + 1}`
+            }];
+          });
+        }
+      }
+
+      // State recovery on reconnect (Anti-F5)
+      if (data.event === "state_recovered" && data.state) {
+        setIsRecovering(true);
+        const state = data.state;
+        
+        const recoveredQuestion = state.question;
+        const questionIndex = state.currentQuestion ?? state.question_index ?? 0;
+        const timeRemaining = state.time_remaining ?? state.duration ?? 20;
+
+        setQuestion(recoveredQuestion);
+        setQuestionNum(questionIndex + 1);
+        setPhase("question");
+        setMaxTime(recoveredQuestion.time_limit ?? 20);
+        setTimeLeft(timeRemaining);
+        setSelectedOption(null);
+
+        // Resume timer
+        clearTimer();
+        timerRef.current = setInterval(() => {
+          setTimeLeft((t) => {
+            if (t <= 1) {
+              clearTimer();
+              setPhase("answer_reveal");
+              return 0;
+            }
+            return t - 1;
+          });
+        }, 1000);
+
+        setTimeout(() => setIsRecovering(false), 2000);
+      }
+
+      if (data.event === "result") {
+        clearTimer();
+        setPhase("answer_reveal");
+        if (data.scores) {
+          const sorted = Object.entries(data.scores)
+            .map(([uid, score]) => {
+              const p = wsPlayers.find((p) => p.user_id === Number(uid));
+              return { user_id: Number(uid), username: p?.username ?? `Player ${uid}`, score: Number(score) };
+            })
+            .sort((a, b) => b.score - a.score);
+          setScores(sorted);
+        }
+      }
+
+      if (data.event === "game_finished" || data.event === "game_end") {
+        clearTimer();
+        if (data.leaderboard) {
+          const sorted = data.leaderboard.map((entry: any) => {
+            const p = wsPlayers.find((p) => p.user_id === entry.user_id);
+            return { 
+              user_id: entry.user_id, 
+              username: p?.username || `Player ${entry.user_id}`, 
+              score: entry.score 
+            };
+          }).sort((a: any, b: any) => b.score - a.score);
+          setScores(sorted);
+        }
+        setPhase("final");
+      }
+    } catch (err) {
+      console.error("Error processing WS message:", err);
+    }
+  }, [lastMessage, wsPlayers, questionNum, question?.content, maxTime]);
+
+  // Set phase to waiting when connected
+  useEffect(() => {
+    if (isConnected && phase === "connecting") {
+      setPhase("waiting");
+    }
+  }, [isConnected, phase]);
 
   const handleSelectOption = (optId: number) => {
     if (phase !== "question" || selectedOption !== null) return;
     setSelectedOption(optId);
-    wsRef.current?.send(JSON.stringify({ event: "answer", option_id: optId }));
+    
+    // Calculate time taken
+    const timeTaken = maxTime - timeLeft;
+    
+    sendEvent({ 
+      event: "submit_answer", 
+      question_index: questionNum - 1,
+      selected_option_ids: [optId],
+      time_taken: timeTaken
+    });
   };
 
   /* ── ERROR ───────────────────────────────────── */
@@ -292,12 +350,65 @@ export default function PlayRoomPage({ params }: { params: Promise<{ code: strin
                   </div>
                 ))}
                 {scores.length === 0 && (
-                  <p style={{ textAlign: "center", color: "var(--text-muted)", padding: 24 }}>
-                    No scores recorded.
-                  </p>
+                   <p style={{ textAlign: "center", color: "var(--text-muted)", padding: 24 }}>
+                     No scores recorded.
+                   </p>
                 )}
               </div>
             </div>
+
+            {/* Personal Scorecard */}
+            {userResults.length > 0 && (
+              <div style={{ marginTop: 40 }} className="animate-slideInUp" style={{ animationDelay: '0.2s' }}>
+                <h3 style={{ fontSize: "1.25rem", fontWeight: 700, color: "var(--text-primary)", marginBottom: 16, textAlign: 'center' }}>
+                  Your Performance
+                </h3>
+                <div className="card" style={{ padding: 0, overflow: 'hidden' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                    <thead style={{ background: 'var(--surface-alt)', borderBottom: '1px solid var(--border)' }}>
+                      <tr>
+                        <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600 }}>#</th>
+                        <th style={{ padding: '12px 16px', textAlign: 'left', fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600 }}>QUESTION</th>
+                        <th style={{ padding: '12px 16px', textAlign: 'center', fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600 }}>RESULT</th>
+                        <th style={{ padding: '12px 16px', textAlign: 'right', fontSize: '0.8rem', color: 'var(--text-muted)', fontWeight: 600 }}>POINTS</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {userResults.sort((a,b) => a.question_index - b.question_index).map((res, idx) => (
+                        <tr key={idx} style={{ borderBottom: idx === userResults.length - 1 ? 'none' : '1px solid var(--border)' }}>
+                          <td style={{ padding: '14px 16px', color: 'var(--text-secondary)', fontWeight: 600 }}>{idx + 1}</td>
+                          <td style={{ padding: '14px 16px', color: 'var(--text-primary)', fontWeight: 500, fontSize: '0.9rem' }}>
+                            <div style={{ maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              {res.content}
+                            </div>
+                          </td>
+                          <td style={{ padding: '14px 16px', textAlign: 'center' }}>
+                            <span style={{ 
+                              display: 'inline-flex', alignItems: 'center', justifyContent: 'center',
+                              width: 24, height: 24, borderRadius: '50%',
+                              background: res.is_correct ? 'rgba(16, 185, 129, 0.1)' : 'rgba(239, 68, 68, 0.1)',
+                              color: res.is_correct ? '#10b981' : '#ef4444',
+                              fontSize: '0.8rem', fontWeight: 900
+                            }}>
+                              {res.is_correct ? '✓' : '✗'}
+                            </span>
+                          </td>
+                          <td style={{ padding: '14px 16px', textAlign: 'right', fontWeight: 700, color: res.is_correct ? 'var(--primary)' : 'var(--text-muted)' }}>
+                            +{res.score}
+                          </td>
+                        </tr>
+                      ))}
+                      <tr style={{ background: 'var(--primary-muted)', borderTop: '2px solid var(--primary)' }}>
+                        <td colSpan={3} style={{ padding: '16px', textAlign: 'right', fontWeight: 800, color: 'var(--primary)', fontSize: '1rem' }}>Total Score:</td>
+                        <td style={{ padding: '16px', textAlign: 'right', fontWeight: 900, color: 'var(--primary)', fontSize: '1.2rem' }}>
+                          {userResults.reduce((acc, curr) => acc + curr.score, 0).toLocaleString()}
+                        </td>
+                      </tr>
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
 
             <div style={{ textAlign: "center", marginTop: 28 }}>
               <button

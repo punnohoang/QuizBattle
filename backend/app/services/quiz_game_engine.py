@@ -8,6 +8,10 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.services.game_state_manager import GameStateManager
+from app.core.redis_ops import RoomRedisManager
+from app.models import GameSession, Participant, PlayerAnswer, Option
+from sqlalchemy import select
+from datetime import datetime
 
 
 class QuizGameEngine:
@@ -128,6 +132,11 @@ class QuizGameEngine:
                 "message": "All questions completed!",
                 "leaderboard": final_leaderboard
             })
+            # Persist final state and clean up Redis
+            try:
+                await self.finalize_game(room_id)
+            except Exception as e:
+                print(f"Error finalizing game {room_id}: {e}")
 
         except asyncio.CancelledError:
             pass  # Game was interrupted
@@ -294,6 +303,23 @@ class QuizGameEngine:
             with open("scoring_debug.log", "a") as f:
                 f.write(log_calc)
 
+        # 4.5. Buffer the submitted answer for final DB persistence
+        try:
+            option_id: int | None = user_selected_ids[0] if user_selected_ids else None
+            answer_payload = json.dumps({
+                "question_id": question["id"],
+                "question_index": question_index,
+                "selected_option_ids": user_selected_ids,
+                "option_id": option_id,
+                "is_correct": is_correct,
+                "time_taken": time_taken,
+                "score_earned": score,
+                "answered_at": int(datetime.utcnow().timestamp()),
+            })
+            await self.state_manager.redis_ops.buffer_user_answer(room_id, user_id, answer_payload)
+        except Exception as e:
+            print(f"Failed to buffer answer for room {room_id}, user {user_id}: {e}")
+
         # 5. Update Leaderboard immediately
         if score > 0:
             await self.state_manager.redis_ops.increment_leaderboard(room_id, user_id, score)
@@ -335,6 +361,197 @@ class QuizGameEngine:
     async def cleanup_room(self, room_id: int) -> None:
         """Cleanup all state for a room."""
         self.stop_game(room_id)
+
+    async def finalize_game(self, room_id: int) -> None:
+        """
+        Finalize a finished game:
+        - Batch insert buffered answers from Redis -> `player_answers`
+        - Update `game_sessions` status to FINISHED and set ended_at
+        - Ensure `participants` exist and update their `total_score` from leaderboard
+        - Clear all Redis keys related to this room
+        """
+        redis_ops = RoomRedisManager(self.redis)
+
+        # Load players and leaderboard from Redis
+        players = await redis_ops.get_all_players(room_id)  # list of {user_id, username}
+        leaderboard = await redis_ops.get_leaderboard(room_id)
+
+        # Map user_id -> score
+        score_map = {entry["user_id"]: entry["score"] for entry in leaderboard}
+
+        # Load GameSession
+        try:
+            result = await self.db.execute(select(GameSession).where(GameSession.id == room_id))
+            session = result.scalar_one_or_none()
+        except Exception:
+            session = None
+
+        # Update session status
+        if session:
+            session.status = "FINISHED"
+            session.ended_at = datetime.utcnow()
+            self.db.add(session)
+
+        # For each player: ensure Participant exists, update score, batch insert answers
+        for p in players:
+            user_id = int(p.get("user_id"))
+            nickname = p.get("username") or ""
+
+            # find or create participant
+            participant = None
+            if session:
+                q = await self.db.execute(
+                    select(Participant).where(
+                        Participant.session_id == session.id,
+                        Participant.user_id == user_id
+                    )
+                )
+                participant = q.scalar_one_or_none()
+
+                if not participant:
+                    participant = Participant(
+                        session_id=session.id,
+                        user_id=user_id,
+                        nickname=nickname,
+                        total_score=score_map.get(user_id, 0),
+                    )
+                    self.db.add(participant)
+                    await self.db.flush()
+                else:
+                    participant.nickname = nickname
+                    participant.total_score = score_map.get(user_id, participant.total_score)
+                    self.db.add(participant)
+
+            # Batch insert buffered answers for this user
+            try:
+                buffered = await redis_ops.get_user_answers(room_id, user_id)
+            except Exception:
+                buffered = []
+
+            def parse_buffered_answer(entry: str) -> dict | None:
+                if isinstance(entry, (bytes, bytearray)):
+                    entry = entry.decode("utf-8", errors="ignore")
+
+                try:
+                    parsed = json.loads(entry)
+                    if isinstance(parsed, dict):
+                        return parsed
+                except Exception:
+                    pass
+
+                # Legacy support for "{questionId}:{answer}:{timestamp}" entries
+                try:
+                    parts = entry.rsplit(":", 1)
+                    if len(parts) != 2:
+                        return None
+
+                    question_answer = parts[0]
+                    timestamp = int(parts[1])
+                    q_parts = question_answer.split(":", 1)
+                    if len(q_parts) != 2:
+                        return None
+
+                    question_id = int(q_parts[0])
+                    answer_part = q_parts[1]
+                    option_id = int(answer_part) if answer_part.isdigit() else None
+
+                    return {
+                        "question_id": question_id,
+                        "selected_option_ids": [option_id] if option_id is not None else [],
+                        "option_id": option_id,
+                        "is_correct": False,
+                        "time_taken": 0,
+                        "score_earned": 0,
+                        "answered_at": timestamp,
+                    }
+                except Exception:
+                    return None
+
+            answers_to_add = []
+            for entry in buffered:
+                try:
+                    parsed = parse_buffered_answer(entry)
+                    if not parsed:
+                        continue
+
+                    question_id = int(parsed["question_id"])
+                    selected_option_ids = parsed.get("selected_option_ids") or []
+                    option_id = parsed.get("option_id")
+                    if option_id is None and selected_option_ids:
+                        option_id = int(selected_option_ids[0])
+
+                    is_correct = bool(parsed.get("is_correct", False))
+                    score_earned = int(parsed.get("score_earned", 0) or 0)
+                    time_taken = int(parsed.get("time_taken", 0) or 0)
+                    answered_at = int(parsed.get("answered_at", 0) or 0)
+
+                    if not is_correct and option_id is not None:
+                        try:
+                            opt_q = await self.db.execute(
+                                select(Option).where(Option.id == option_id)
+                            )
+                            opt_obj = opt_q.scalar_one_or_none()
+                            if opt_obj:
+                                is_correct = bool(opt_obj.is_correct)
+                        except Exception:
+                            is_correct = False
+
+                    # response_time should reflect time spent answering when available
+                    response_time = time_taken * 1000 if time_taken > 0 else answered_at
+
+                    if session and participant:
+                        pa = PlayerAnswer(
+                            participant_id=participant.id,
+                            question_id=question_id,
+                            option_id=option_id,
+                            response_time=response_time,
+                            score_earned=score_earned,
+                            is_correct=is_correct,
+                        )
+                        answers_to_add.append(pa)
+                except Exception:
+                    continue
+
+            # persist answers
+            if answers_to_add:
+                for a in answers_to_add:
+                    self.db.add(a)
+
+            # clear user's answer buffer
+            try:
+                await redis_ops.clear_user_answers(room_id, user_id)
+            except Exception:
+                pass
+
+        # Commit DB changes
+        try:
+            await self.db.commit()
+        except Exception as e:
+            try:
+                await self.db.rollback()
+            except:
+                pass
+            print(f"Error committing finalized game data: {e}")
+
+        # Finally, delete all Redis keys for room to free memory
+        try:
+            # delete per-user current question keys and answer buffers
+            for p in players:
+                try:
+                    uid = int(p.get("user_id"))
+                    from app.core.redis_keys import get_current_question_key, get_user_answers_key
+
+                    await self.redis.delete(get_current_question_key(room_id, uid))
+                    await self.redis.delete(get_user_answers_key(room_id, uid))
+                except Exception:
+                    continue
+
+            # delete shared keys
+            await redis_ops.clear_questions(room_id)
+            await redis_ops.clear_answers(room_id)
+            await redis_ops.cleanup_room(room_id)
+        except Exception as e:
+            print(f"Error cleaning redis for room {room_id}: {e}")
 
 
 # Global game engine instance

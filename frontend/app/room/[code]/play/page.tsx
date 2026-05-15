@@ -149,6 +149,17 @@ export default function PlayRoomPage({ params }: { params: Promise<{ code: strin
       //5. Question time up (leaderboard update + show correct answer to players)
       if (data.event === "question_time_up") {
         clearTimer();
+
+        if (userId !== null && !answeredUsers.has(userId)) {
+          setAnsweredUsers(prev => new Set([...prev, userId]));
+          sendEvent({
+            event: "submit_answer",
+            question_index: questionNum - 1,
+            selected_option_ids: [],
+            time_taken: maxTime,
+          });
+        }
+
         setPhase("answer_reveal");
 
         if (data.leaderboard) {

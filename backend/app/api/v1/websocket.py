@@ -67,6 +67,13 @@ async def websocket_room(room_code: str, websocket: WebSocket):
         # Register connection (already accepted)
         await manager.connect(room_code, websocket, user_id)
         logger.info(f"🚀 User {user_id} ({username}) connected to room {room_code}")
+
+        await websocket.send_json({
+            "event": "connection_ready",
+            "user_id": user_id,
+            "username": username,
+            "room_code": room_code,
+        })
         
         # Add to Redis
         await add_player_to_redis(redis, room_id, user_id, username)
@@ -125,6 +132,7 @@ async def websocket_room(room_code: str, websocket: WebSocket):
                                     broadcast_callback=lambda msg: manager.broadcast(room_code, msg)
                                 )
                                 
+                            
                                 # Send confirmation/result back to player
                                 await websocket.send_json({
                                     "event": "answer_result",
@@ -132,8 +140,8 @@ async def websocket_room(room_code: str, websocket: WebSocket):
                                     "result": {
                                         "question_index": q_index,
                                         "is_correct": result.get("is_correct", False),
-                                        "score": result.get("score", 0),
-                                        "correct_option_ids": result.get("correct_option_ids", []),
+                                        "score": result.get("score", 0)
+                                        # "correct_option_ids": result.get("correct_option_ids", []), --- IGNORE, NOT EXPOSE ANSWER ---
                                     }
                                 })
                         except json.JSONDecodeError:

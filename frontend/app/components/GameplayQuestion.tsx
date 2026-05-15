@@ -1,8 +1,65 @@
 "use client";
 
-import type { QuestionResponse, WSPlayer } from "@/lib/types";
+import type { LeaderboardEntry, QuestionResponse, WSPlayer } from "@/lib/types";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { CountdownTimer } from "./CountdownTimer";
 import { AnswerOptions } from "./AnswerOptions";
+
+function AnimatedScoreValue({ value }: { value: number }) {
+  const [displayValue, setDisplayValue] = useState(value);
+  const [scale, setScale] = useState(1);
+  const currentValueRef = useRef(value);
+
+  useEffect(() => {
+    const fromValue = currentValueRef.current;
+    const toValue = value;
+
+    if (fromValue === toValue) {
+      return;
+    }
+
+    if (toValue > fromValue) {
+      setScale(1.08);
+      requestAnimationFrame(() => setScale(1));
+    }
+
+    let rafId = 0;
+    const duration = Math.min(900, Math.max(350, Math.abs(toValue - fromValue) * 18));
+    const startTime = performance.now();
+
+    const animate = (now: number) => {
+      const progress = Math.min((now - startTime) / duration, 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
+      const nextValue = Math.round(fromValue + (toValue - fromValue) * eased);
+
+      setDisplayValue(nextValue);
+      currentValueRef.current = nextValue;
+
+      if (progress < 1) {
+        rafId = requestAnimationFrame(animate);
+      } else {
+        currentValueRef.current = toValue;
+      }
+    };
+
+    rafId = requestAnimationFrame(animate);
+
+    return () => cancelAnimationFrame(rafId);
+  }, [value]);
+
+  return (
+    <span
+      style={{
+        display: "inline-block",
+        transform: `scale(${scale})`,
+        transformOrigin: "center",
+        transition: "transform 180ms cubic-bezier(0.2, 1.2, 0.4, 1)",
+      }}
+    >
+      {displayValue.toLocaleString()}
+    </span>
+  );
+}
 
 interface GameplayQuestionProps {
   question: QuestionResponse;
@@ -10,9 +67,11 @@ interface GameplayQuestionProps {
   timeLeft: number;
   maxTime: number;
   players: WSPlayer[];
+  leaderboard: LeaderboardEntry[];
   selectedOption: number | null;
   phase: "question" | "answer_reveal";
   isRecovering: boolean;
+  answeredUsers: Set<number>;
   onSelectOption: (optionId: number) => void;
 }
 
@@ -29,193 +88,335 @@ export function GameplayQuestion({
   timeLeft,
   maxTime,
   players,
+  leaderboard,
   selectedOption,
   phase,
   isRecovering,
+  answeredUsers,
   onSelectOption,
 }: GameplayQuestionProps) {
   const isLowTime = timeLeft <= maxTime * 0.25;
+  const itemRefs = useRef(new Map<number, HTMLDivElement | null>());
+  const previousRects = useRef(new Map<number, DOMRect>());
 
-  return (
-    <div
+  const scoreByUser = new Map(leaderboard.map((entry) => [entry.user_id, Number(entry.score) || 0]));
+  const leaderboardRows = players.length > 0
+    ? players.map((player) => ({
+        user_id: player.user_id,
+        username: player.username,
+        score: scoreByUser.get(player.user_id) ?? 0,
+      })).sort((a, b) => b.score - a.score)
+    : [...leaderboard].sort((a, b) => b.score - a.score);
+
+  useLayoutEffect(() => {
+    const nextRects = new Map<number, DOMRect>();
+
+    leaderboardRows.forEach((entry) => {
+      const node = itemRefs.current.get(entry.user_id);
+      if (!node) return;
+
+      const nextRect = node.getBoundingClientRect();
+      const previousRect = previousRects.current.get(entry.user_id);
+
+      if (previousRect) {
+        const deltaY = previousRect.top - nextRect.top;
+        if (deltaY !== 0) {
+          node.style.transition = "none";
+          node.style.transform = `translateY(${deltaY}px)`;
+          node.style.zIndex = "1";
+
+          requestAnimationFrame(() => {
+            node.style.transition = "transform 800ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 800ms cubic-bezier(0.22, 1, 0.36, 1)";
+            node.style.transform = "translateY(0)";
+            node.style.zIndex = "";
+          });
+        }
+      }
+
+      nextRects.set(entry.user_id, nextRect);
+    });
+
+    previousRects.current = nextRects;
+  }, [leaderboardRows]);
+
+  return (<div
       style={{
         minHeight: "100vh",
         background: "var(--background)",
         display: "flex",
-        flexDirection: "column",
         position: "relative",
         overflow: "hidden",
       }}
     >
-      {/* ────── TOP BAR ────────────────────────── */}
-      <div
-        style={{
-          background: "var(--surface)",
-          borderBottom: "1px solid var(--border)",
-          padding: "12px 24px",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          boxShadow: "var(--shadow-sm)",
-          position: "sticky",
-          top: 0,
-          zIndex: 50,
-        }}
-      >
-        {/* Left: Brand + Question Counter */}
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <div
-            style={{
-              width: 32,
-              height: 32,
-              borderRadius: 8,
-              background: "var(--gradient-primary)",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontSize: "0.9rem",
-              fontWeight: 900,
-              color: "white",
-            }}
-          >
-            ⚡
-          </div>
-          <span style={{ fontWeight: 700, color: "var(--primary)", fontSize: "1rem" }}>
-            QuizBattle
-          </span>
-          <span
-            style={{
-              background: "var(--primary-muted)",
-              color: "var(--primary)",
-              borderRadius: 999,
-              padding: "3px 12px",
-              fontSize: "0.8rem",
-              fontWeight: 700,
-              border: "1px solid var(--accent-light)",
-            }}
-          >
-            Q{questionNumber}
-          </span>
-        </div>
-
-        {/* Center: Circular Timer */}
-        <div style={{ position: "relative" }}>
-          <CountdownTimer
-            timeLeft={timeLeft}
-            maxTime={maxTime}
-            isLowTime={isLowTime}
-          />
-
-          {/* Recovery indicator badge */}
-          {isRecovering && (
+      <div style={{ display: "flex", flexDirection: "column", minHeight: "100vh", width: "100%" }}>
+        {/* ────── TOP BAR ────────────────────────── */}
+        <div
+          style={{
+            background: "var(--surface)",
+            borderBottom: "1px solid var(--border)",
+            padding: "12px 24px",
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "space-between",
+            boxShadow: "var(--shadow-sm)",
+            position: "sticky",
+            top: 0,
+            zIndex: 50,
+            width: "100%",
+          }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
             <div
               style={{
-                position: "absolute",
-                top: -8,
-                right: -8,
-                width: 24,
-                height: 24,
-                borderRadius: "50%",
-                background: "#10b981",
+                width: 32,
+                height: 32,
+                borderRadius: 8,
+                background: "var(--gradient-primary)",
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
-                color: "white",
-                fontSize: "0.75rem",
+                fontSize: "0.9rem",
                 fontWeight: 900,
-                boxShadow: "0 2px 8px rgba(16, 185, 129, 0.3)",
-                animation: "pulse 0.6s ease-in-out",
+                color: "white",
               }}
             >
-              ✓
+              ⚡
             </div>
-          )}
-        </div>
+            <span style={{ fontWeight: 700, color: "var(--primary)", fontSize: "1rem" }}>
+              QuizBattle
+            </span>
+            <span
+              style={{
+                background: "var(--primary-muted)",
+                color: "var(--primary)",
+                borderRadius: 999,
+                padding: "3px 12px",
+                fontSize: "0.8rem",
+                fontWeight: 700,
+                border: "1px solid var(--accent-light)",
+              }}
+            >
+              Q{questionNumber}
+            </span>
+          </div>
 
-        {/* Right: Players Count */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            gap: 6,
-            fontSize: "0.875rem",
-            color: "var(--text-secondary)",
-            fontWeight: 600,
-            padding: "6px 12px",
-            background: "var(--primary-muted)",
-            borderRadius: 999,
-            border: "1px solid var(--accent-light)",
-          }}
-        >
-          <span>👥</span>
-          <span>{players.length} players</span>
-        </div>
-      </div>
+          <div style={{ position: "relative" }}>
+            <CountdownTimer
+              timeLeft={timeLeft}
+              maxTime={maxTime}
+              isLowTime={isLowTime}
+            />
 
-      {/* ────── QUESTION CONTENT ────────────────── */}
-      <div
-        style={{
-          padding: "36px 24px 24px",
-          textAlign: "center",
-          maxWidth: 760,
-          margin: "0 auto",
-          width: "100%",
-        }}
-      >
-        {/* Double Points Badge */}
-        {question.score_type === "double" && (
+            {isRecovering && (
+              <div
+                style={{
+                  position: "absolute",
+                  top: -8,
+                  right: -8,
+                  width: 24,
+                  height: 24,
+                  borderRadius: "50%",
+                  background: "#10b981",
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  color: "white",
+                  fontSize: "0.75rem",
+                  fontWeight: 900,
+                  boxShadow: "0 2px 8px rgba(16, 185, 129, 0.3)",
+                  animation: "pulse 0.6s ease-in-out",
+                }}
+              >
+                ✓
+              </div>
+            )}
+          </div>
+
           <div
             style={{
-              display: "inline-flex",
+              display: "flex",
               alignItems: "center",
-              gap: 8,
-              background: "#fef3c7",
-              border: "1.5px solid #fcd34d",
-              color: "#92400e",
+              gap: 6,
+              fontSize: "0.875rem",
+              color: "var(--text-secondary)",
+              fontWeight: 600,
+              padding: "6px 12px",
+              background: "var(--primary-muted)",
               borderRadius: 999,
-              padding: "6px 16px",
-              fontSize: "0.825rem",
-              fontWeight: 700,
-              marginBottom: 20,
-              animation: "pulse 1.5s ease-in-out infinite",
+              border: "1px solid var(--accent-light)",
             }}
           >
-            <span>⭐</span>
-            <span>Double Points</span>
+            <span>👥</span>
+            <span>{players.length} players</span>
           </div>
-        )}
+        </div>
 
-        {/* Question Text */}
-        <h2
-          style={{
-            fontSize: "clamp(1.3rem, 4vw, 1.875rem)",
-            fontWeight: 700,
-            lineHeight: 1.5,
-            color: "var(--text-primary)",
-            marginBottom: 0,
-          }}
-        >
-          {question.content}
-        </h2>
+        <div className="gameplay-shell" style={{ flex: 1 }}>
+          <div className="gameplay-main">
+            {/* ────── CONTENT AREA (Questions, Options) ────── */}
+            <div className="gameplay-content" style={{ display: "flex", flexDirection: "column", flex: 1, position: "relative" }}>
+              {/* Center Area: Question */}
+              <div
+                style={{
+                  padding: "36px 24px 24px",
+                  textAlign: "center",
+                  maxWidth: 760,
+                  margin: "0 auto",
+                  width: "100%",
+                }}
+              >
+                {question.score_type === "double" && (
+                  <div
+                    style={{
+                      display: "inline-flex",
+                      alignItems: "center",
+                      gap: 8,
+                      background: "#fef3c7",
+                      border: "1.5px solid #fcd34d",
+                      color: "#92400e",
+                      borderRadius: 999,
+                      padding: "6px 16px",
+                      fontSize: "0.825rem",
+                      fontWeight: 700,
+                      marginBottom: 20,
+                      animation: "pulse 1.5s ease-in-out infinite",
+                    }}
+                  >
+                    <span>⭐</span>
+                    <span>Double Points</span>
+                  </div>
+                )}
+
+                <h2
+                  style={{
+                    fontSize: "clamp(1.3rem, 4vw, 1.875rem)",
+                    fontWeight: 700,
+                    lineHeight: 1.5,
+                    color: "var(--text-primary)",
+                    marginBottom: 0,
+                  }}
+                >
+                  {question.content}
+                </h2>
+              </div>
+
+              {/* Center Area: Options */}
+              <div
+                style={{
+                  flex: 1,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  padding: "0 24px 48px",
+                }}
+              >
+                <AnswerOptions
+                  options={question.options}
+                  selectedOption={selectedOption}
+                  phase={phase}
+                  onSelect={onSelectOption}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Right Area: Sidebar */}
+          <aside className="gameplay-sidebar">
+            <div className="leaderboard-card">
+              <div style={{ marginBottom: 14 }}>
+                <div style={{ fontSize: "0.75rem", fontWeight: 800, color: "var(--text-muted)", letterSpacing: "0.12em" }}>
+                  LIVE LEADERBOARD
+                </div>
+                <h3 style={{ margin: "4px 0 0", fontSize: "1.1rem", color: "var(--text-primary)" }}>
+                  Current standings
+                </h3>
+                <div style={{ fontSize: "0.8rem", color: "var(--text-secondary)", marginTop: 6 }}>
+                  {answeredUsers.size} / {players.length} answered
+                </div>
+              </div>
+
+              <div className="leaderboard-list">
+                {leaderboardRows.length > 0 ? (
+                  leaderboardRows.map((entry, index) => {
+                    const player = players.find((p) => p.user_id === entry.user_id);
+                    const username = player?.username || entry.username || `Player ${entry.user_id}`;
+                    const rank = index + 1;
+                    const rankLabel = rank === 1 ? "🥇" : rank === 2 ? "🥈" : rank === 3 ? "🥉" : `#${rank}`;
+                    const hasAnswered = answeredUsers.has(entry.user_id);
+
+                    return (
+                      <div
+                        key={entry.user_id}
+                        className="leaderboard-item"
+                        ref={(node) => {
+                          itemRefs.current.set(entry.user_id, node);
+                        }}
+                        style={{
+                          willChange: "transform",
+                          background:
+                            hasAnswered
+                              ? "linear-gradient(135deg, rgba(59, 130, 246, 0.08), rgba(37, 99, 235, 0.03))"
+                              : rank === 1
+                                ? "linear-gradient(135deg, #fef3c7, #fde68a)"
+                                : rank === 2
+                                  ? "linear-gradient(135deg, #f1f5f9, #e2e8f0)"
+                                  : rank === 3
+                                    ? "linear-gradient(135deg, #fef3e8, #fed7aa)"
+                                    : "var(--surface-alt)",
+                            borderColor: hasAnswered
+                            ? "rgba(59, 130, 246, 0.45)"
+                            : rank === 1
+                              ? "#fcd34d"
+                              : rank === 2
+                                ? "#cbd5e1"
+                                : rank === 3
+                                  ? "#fdba74"
+                                  : "transparent",
+                            borderWidth: hasAnswered ? "2px" : "1px",
+                          borderStyle: "solid",
+                            boxShadow: hasAnswered ? "0 0 0 1px rgba(59, 130, 246, 0.10), 0 0 18px rgba(59, 130, 246, 0.16)" : "none",
+                            transition: "border-color 0.2s ease, box-shadow 0.2s ease",
+                        }}
+                      >
+                        <div className="leaderboard-score">
+                          <div style={{ fontSize: "1.05rem", lineHeight: 1 }}>
+                            <AnimatedScoreValue value={entry.score} />
+                          </div>
+                          <div style={{ fontSize: "0.72rem", color: "var(--text-muted)", fontWeight: 700 }}>PTS</div>
+                        </div>
+
+                        <div className="leaderboard-avatar-stack">
+                          <div className="avatar avatar-sm" style={{ boxShadow: "none" }}>
+                            {username.charAt(0).toUpperCase()}
+                          </div>
+                          <div style={{ display: "flex", alignItems: "center", flex: 1 }}>
+                            <div className="leaderboard-name">{username}</div>
+                          </div>
+                        </div>
+
+                        <div style={{ marginLeft: "auto", fontWeight: 800, color: "var(--text-secondary)", fontSize: "0.85rem" }}>
+                          {rankLabel}
+                        </div>
+                      </div>
+                    );
+                  })
+                ) : (
+                  <div className="leaderboard-empty">
+                    <div style={{ fontSize: "1.8rem", marginBottom: 8 }}>👥</div>
+                    <div style={{ fontWeight: 700, color: "var(--text-primary)", marginBottom: 4 }}>
+                      Waiting for scores...
+                    </div>
+                    <div style={{ fontSize: "0.9rem", color: "var(--text-muted)", textAlign: "center" }}>
+                      The leaderboard will update after each question ends.
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          </aside>
       </div>
 
-      {/* ────── ANSWER OPTIONS ────────────────── */}
-      <div
-        style={{
-          flex: 1,
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-          padding: "0 24px 48px",
-        }}
-      >
-        <AnswerOptions
-          options={question.options}
-          selectedOption={selectedOption}
-          phase={phase}
-          onSelect={onSelectOption}
-        />
-      </div>
+          </div>
 
       {/* ────── ANSWER LOCKED TOAST ────────────── */}
       {selectedOption !== null && phase === "question" && (

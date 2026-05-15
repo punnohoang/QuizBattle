@@ -135,6 +135,12 @@ export const roomApi = {
   startQuestions: (room_code: string) => api.post(`/rooms/${room_code}/start-questions`),
 };
 
+export const historyApi = {
+  me: (limit = 5, playedPage = 1, hostedPage = 1) =>
+    api.get("/history/me", { params: { limit, played_page: playedPage, hosted_page: hostedPage } }),
+  playedDetail: (sessionId: number) => api.get(`/history/played/${sessionId}`),
+};
+
 export const getWsUrl = (roomCode: string) => {
   const token =
     typeof window !== "undefined" ? localStorage.getItem("access_token") : "";

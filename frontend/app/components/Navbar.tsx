@@ -27,6 +27,7 @@ export default function Navbar() {
   const navLinks = [
     { href: "/dashboard", label: "My Quizzes", icon: "📚" },
     { href: "/dashboard?view=public", label: "Public Quizzes", icon: "🌐" },
+    { href: "/history", label: "History", icon: "🕘" },
     { href: "/join", label: "Join", icon: "🎯" },
   ];
 

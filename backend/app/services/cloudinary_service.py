@@ -2,16 +2,15 @@ import cloudinary
 import cloudinary.uploader
 import cloudinary.api
 from fastapi import UploadFile, HTTPException
-import os
-from typing import Optional
+from app.core.config import settings
 
 class CloudinaryService:
     def __init__(self):
-        # Configuration should ideally be in a central config but we can read from env here
+        # Configuration is now centralized in settings
         cloudinary.config(
-            cloud_name=os.getenv("CLOUDINARY_CLOUD_NAME"),
-            api_key=os.getenv("CLOUDINARY_API_KEY"),
-            api_secret=os.getenv("CLOUDINARY_API_SECRET"),
+            cloud_name=settings.CLOUDINARY_CLOUD_NAME,
+            api_key=settings.CLOUDINARY_API_KEY,
+            api_secret=settings.CLOUDINARY_API_SECRET,
             secure=True
         )
 

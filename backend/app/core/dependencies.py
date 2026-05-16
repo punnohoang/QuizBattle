@@ -9,6 +9,7 @@ from ..models import User
 from .security import verify_token
 from .cache import get_redis, get_token_blacklist_key
 from redis.asyncio import Redis
+from ..services.auth_service import AuthService
 
 
 async def get_current_user(
@@ -113,3 +114,10 @@ async def require_real_user(user: Annotated[User, Depends(get_current_user)]) ->
 # Type aliases for cleaner usage
 CurrentUser = Annotated[User, Depends(get_current_user)]
 RealUser = Annotated[User, Depends(require_real_user)]
+
+async def get_auth_service(
+    db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis)
+) -> AuthService:
+    """Dependency to provide a configured AuthService instance."""
+    return AuthService(db, redis)

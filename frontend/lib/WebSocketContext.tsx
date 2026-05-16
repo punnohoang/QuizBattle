@@ -69,11 +69,9 @@ export const WebSocketProvider: React.FC<{ roomCode: string; children: React.Rea
       const effectiveToken = (guestRoomCode === roomCode) ? guestToken : undefined;
       
       const wsUrl = getWsUrl(roomCode, effectiveToken || undefined);
-      console.log("🔌 [Shared WS] Connecting to:", roomCode, effectiveToken ? "(as guest)" : "(as user)");
       const socket = new WebSocket(wsUrl);
 
       socket.onopen = () => {
-        console.log("✅ [Shared WS] Connected to room:", roomCode);
         setIsConnected(true);
         setError("");
         wsRef.current = socket;
@@ -139,7 +137,6 @@ export const WebSocketProvider: React.FC<{ roomCode: string; children: React.Rea
       };
 
       socket.onclose = (event) => {
-        console.log("🔌 [Shared WS] Closed:", event.code, event.reason);
         setIsConnected(false);
         // Only clear ref if it's actually THIS socket closing
         if (wsRef.current === socket) {

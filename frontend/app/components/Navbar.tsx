@@ -29,7 +29,6 @@ export default function Navbar() {
     { href: "/dashboard", label: "My Quizzes", icon: "📚", hideForGuest: true },
     { href: "/dashboard?view=public", label: "Public Quizzes", icon: "🌐", hideForGuest: true },
     { href: "/history", label: "History", icon: "🕘", hideForGuest: true },
-    { href: "/profile", label: "Profile", icon: "👤", hideForGuest: true },
     { href: "/join", label: "Join", icon: "🎯" },
   ].filter(link => !isGuest || !link.hideForGuest);
 
@@ -105,7 +104,7 @@ export default function Navbar() {
               ))}
 
               {/* User pill */}
-              <Link 
+              <Link
                 href="/profile"
                 style={{
                   display: "flex",
@@ -124,8 +123,8 @@ export default function Navbar() {
               >
                 <div
                   className="avatar avatar-sm"
-                  style={{ 
-                    width: 28, height: 28, fontSize: "0.75rem", overflow: "hidden" 
+                  style={{
+                    width: 28, height: 28, fontSize: "0.75rem", overflow: "hidden"
                   }}
                 >
                   {user?.avatar_url ? (

@@ -32,3 +32,4 @@ watchfiles==1.1.1
 websockets==16.0
 cloudinary==1.41.0
 python-multipart==0.0.12
+pydantic-settings==2.14.1

@@ -200,19 +200,35 @@ export default function ProfilePage() {
                     />
                   </div>
 
-                  {message.text && (
-                    <div className={`alert alert-${message.type === 'error' ? 'error' : 'success'}`} style={{ marginBottom: 20 }}>
-                      {message.text}
-                    </div>
-                  )}
-
-                  <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 32 }}>
+                  <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 32, gap: 12, alignItems: "center" }}>
+                    {message.text && (
+                      <span style={{ 
+                        color: message.type === 'error' ? 'var(--error)' : 'var(--success)',
+                        fontSize: '0.9rem',
+                        fontWeight: 500
+                      }}>
+                        {message.text}
+                      </span>
+                    )}
                     <button 
                       type="submit" 
                       className="btn btn-primary btn-lg" 
                       disabled={isLoading}
+                      style={{ minWidth: 140 }}
                     >
-                      {isLoading ? "Saving..." : "Save Changes"}
+                      {isLoading ? (
+                        <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                          <span className="spinner" style={{ 
+                            width: 16, 
+                            height: 16, 
+                            border: "2px solid rgba(255,255,255,0.3)", 
+                            borderTopColor: "white", 
+                            borderRadius: "50%", 
+                            animation: "spin 0.8s linear infinite" 
+                          }} />
+                          Saving...
+                        </span>
+                      ) : "Save Changes"}
                     </button>
                   </div>
                 </form>

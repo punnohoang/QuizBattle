@@ -223,6 +223,9 @@ export default function PlayRoomPage({ params }: { params: Promise<{ code: strin
         if (data.user_id !== undefined) {
           setAnsweredUsers(prev => new Set([...prev, data.user_id]));
         }
+        if (data.leaderboard) {
+          setScores(buildLeaderboardRows(data.leaderboard, wsPlayers));
+        }
       }
 
       // State recovery on reconnect (Anti-F5)

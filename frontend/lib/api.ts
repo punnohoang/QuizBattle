@@ -11,7 +11,7 @@ export const api = axios.create({
 // ─── Request interceptor: attach access token ─────
 api.interceptors.request.use((config) => {
   if (typeof window !== "undefined") {
-    const token = localStorage.getItem("access_token");
+    const token = localStorage.getItem("access_token") || sessionStorage.getItem("guest_token");
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
@@ -88,7 +88,21 @@ export const authApi = {
   login: (data: { email: string; password: string }) =>
     api.post("/auth/login", data),
   logout: () => api.post("/auth/logout"),
-  me: () => api.get("/auth/me"),
+  guestJoin: (data: { nickname: string; room_code: string }) =>
+    api.post("/auth/guest-join", data),
+};
+
+export const userApi = {
+  me: () => api.get("/users/me"),
+  updateMe: (data: { username?: string; current_password?: string; new_password?: string; avatar_url?: string }) =>
+    api.patch("/users/me", data),
+  uploadAvatar: (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return api.post("/users/avatar", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
 };
 
 export const quizApi = {
@@ -141,9 +155,9 @@ export const historyApi = {
   playedDetail: (sessionId: number) => api.get(`/history/played/${sessionId}`),
 };
 
-export const getWsUrl = (roomCode: string) => {
+export const getWsUrl = (roomCode: string, customToken?: string) => {
   const token =
-    typeof window !== "undefined" ? localStorage.getItem("access_token") : "";
+    customToken || (typeof window !== "undefined" ? localStorage.getItem("access_token") : "");
   
   // Use the established BASE_URL but switch to ws/wss protocol
   const wsBase = BASE_URL.replace(/^http/, "ws");

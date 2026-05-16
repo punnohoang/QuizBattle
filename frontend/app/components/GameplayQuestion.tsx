@@ -1,7 +1,7 @@
 "use client";
 
 import type { LeaderboardEntry, QuestionResponse, WSPlayer } from "@/lib/types";
-import { useEffect, useLayoutEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { CountdownTimer } from "./CountdownTimer";
 import { AnswerOptions } from "./AnswerOptions";
 
@@ -99,14 +99,19 @@ export function GameplayQuestion({
   const itemRefs = useRef(new Map<number, HTMLDivElement | null>());
   const previousRects = useRef(new Map<number, DOMRect>());
 
-  const scoreByUser = new Map(leaderboard.map((entry) => [entry.user_id, Number(entry.score) || 0]));
-  const leaderboardRows = players.length > 0
-    ? players.map((player) => ({
-        user_id: player.user_id,
-        username: player.username,
-        score: scoreByUser.get(player.user_id) ?? 0,
-      })).sort((a, b) => b.score - a.score)
-    : [...leaderboard].sort((a, b) => b.score - a.score);
+  const leaderboardRows = useMemo(() => {
+    const scoreByUser = new Map(leaderboard.map((entry) => [entry.user_id, Number(entry.score) || 0]));
+    const base = players.length > 0
+      ? players.map((player) => ({
+          user_id: player.user_id,
+          username: player.username,
+          score: scoreByUser.get(player.user_id) ?? 0,
+        }))
+      : [...leaderboard];
+    
+    // Stable sort by score, then user_id to prevent "jumping" when scores are equal
+    return base.sort((a, b) => b.score - a.score || a.user_id - b.user_id);
+  }, [leaderboard, players]);
 
   useLayoutEffect(() => {
     const nextRects = new Map<number, DOMRect>();
@@ -123,12 +128,17 @@ export function GameplayQuestion({
         if (deltaY !== 0) {
           node.style.transition = "none";
           node.style.transform = `translateY(${deltaY}px)`;
-          node.style.zIndex = "1";
+          node.style.zIndex = "10";
 
+          // Use double requestAnimationFrame to ensure the transform is applied before transition starts
           requestAnimationFrame(() => {
-            node.style.transition = "transform 800ms cubic-bezier(0.22, 1, 0.36, 1), box-shadow 800ms cubic-bezier(0.22, 1, 0.36, 1)";
-            node.style.transform = "translateY(0)";
-            node.style.zIndex = "";
+            requestAnimationFrame(() => {
+              node.style.transition = "transform 400ms cubic-bezier(0.34, 1.56, 0.64, 1)";
+              node.style.transform = "translateY(0)";
+              setTimeout(() => {
+                if (node) node.style.zIndex = "";
+              }, 400);
+            });
           });
         }
       }

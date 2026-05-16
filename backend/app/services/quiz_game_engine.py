@@ -338,11 +338,13 @@ class QuizGameEngine:
             time_taken
         )
 
-        # 7. Broadcast player answered event
+        # 7. Broadcast player answered event with live leaderboard
+        leaderboard = await self.state_manager.redis_ops.get_leaderboard(room_id)
         await broadcast_callback({
             "event": "player_answered",
             "user_id": user_id,
             "question_index": question_index,
+            "leaderboard": leaderboard,
             "message": f"Player answered question {question_index + 1}",
         })
 

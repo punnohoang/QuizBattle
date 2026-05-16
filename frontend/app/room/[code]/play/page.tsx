@@ -2,11 +2,12 @@
 
 import { useEffect, useState, useRef, use } from "react";
 import { useRouter } from "next/navigation";
-import AuthGuard from "../../../components/AuthGuard";
-import { getWsUrl } from "../../../../lib/api";
-import { GameplayQuestion } from "../../../components/GameplayQuestion";
-import { useWebSocket } from "../../../../lib/websocket";
-import type { WSEvent, QuestionResponse, WSPlayer } from "../../../../lib/types";
+import AuthGuard from "@/app/components/AuthGuard";
+import { getWsUrl } from "@/lib/api";
+import { GameplayQuestion } from "@/app/components/GameplayQuestion";
+import { useWebSocket } from "@/lib/websocket";
+import { useAuthStore } from "@/lib/store";
+import type { WSEvent, QuestionResponse, WSPlayer } from "@/lib/types";
 
 interface StateRecovery {
   question_index: number;
@@ -48,6 +49,7 @@ const buildLeaderboardRows = (
 
 export default function PlayRoomPage({ params }: { params: Promise<{ code: string }> }) {
   const router = useRouter();
+  const { user, logout } = useAuthStore();
   const { code } = use(params);
 
   const [phase, setPhase] = useState<GamePhase>("connecting");
@@ -220,6 +222,9 @@ export default function PlayRoomPage({ params }: { params: Promise<{ code: strin
       if (data.event === "player_answered") {
         if (data.user_id !== undefined) {
           setAnsweredUsers(prev => new Set([...prev, data.user_id]));
+        }
+        if (data.leaderboard) {
+          setScores(buildLeaderboardRows(data.leaderboard, wsPlayers));
         }
       }
 
@@ -458,10 +463,22 @@ export default function PlayRoomPage({ params }: { params: Promise<{ code: strin
 
             <div style={{ textAlign: "center", marginTop: 28 }}>
               <button
-                onClick={() => router.push("/dashboard")}
+                onClick={() => {
+                  if (user?.role === "guest") {
+                    if (typeof window !== "undefined") {
+                      sessionStorage.removeItem("guest_token");
+                      sessionStorage.removeItem("guest_user");
+                      sessionStorage.removeItem("guest_room_code");
+                    }
+                    logout();
+                    router.push("/join");
+                  } else {
+                    router.push("/dashboard");
+                  }
+                }}
                 className="btn btn-primary btn-lg"
               >
-                Back to Dashboard
+                {user?.role === "guest" ? "Leave Game" : "Back to Dashboard"}
               </button>
             </div>
           </div>

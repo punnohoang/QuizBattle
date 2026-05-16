@@ -1,8 +1,5 @@
-import os
 from redis.asyncio import Redis
-
-REDIS_URL = os.getenv("REDIS_URL", "redis://localhost:6379/0")
-
+from .config import settings
 
 class RedisClient:
     _instance: Redis | None = None
@@ -10,7 +7,7 @@ class RedisClient:
     @classmethod
     async def get_instance(cls) -> Redis:
         if cls._instance is None:
-            cls._instance = await Redis.from_url(REDIS_URL, decode_responses=True)
+            cls._instance = await Redis.from_url(settings.REDIS_URL, decode_responses=True)
         return cls._instance
 
     @classmethod

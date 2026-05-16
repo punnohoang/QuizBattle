@@ -1,5 +1,6 @@
 from datetime import datetime, timezone
 from typing import Optional
+import uuid
 
 import bcrypt
 from fastapi import HTTPException, status
@@ -14,8 +15,9 @@ from app.core.cache import (
     get_token_blacklist_key,
 )
 from app.core.security import create_access_token, create_refresh_token, verify_token
-from app.models import RefreshToken, User
-from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse
+from app.models import RefreshToken, User, GameSession
+from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserResponse, GuestJoinRequest, GuestJoinResponse, UpdateMeRequest
+from app.services.room_service import RoomService
 
 
 class AuthService:
@@ -51,10 +53,10 @@ class AuthService:
         await self._clear_login_attempts(payload.email)
         return user
 
-    async def generate_tokens(self, user_id: int) -> TokenResponse:
+    async def generate_tokens(self, user_id: int, role: str = "user") -> TokenResponse:
         """Generate access and refresh tokens for user."""
-        access_token = create_access_token(user_id)
-        refresh_token = create_refresh_token(user_id)
+        access_token = create_access_token(user_id, role)
+        refresh_token = create_refresh_token(user_id, role)
         return TokenResponse(access_token=access_token, refresh_token=refresh_token)
 
     async def refresh_access_token(self, refresh_token: str) -> tuple[User, TokenResponse]:
@@ -63,7 +65,7 @@ class AuthService:
         await self._check_token_not_blacklisted(refresh_token)
 
         user = await self._get_user_by_id(int(token_payload.sub))
-        new_tokens = await self.generate_tokens(user.id)
+        new_tokens = await self.generate_tokens(user.id, role=token_payload.role)
 
         return user, new_tokens
 
@@ -164,3 +166,94 @@ class AuthService:
         if ttl > 0:
             blacklist_key = get_token_blacklist_key(token)
             await self.redis.setex(blacklist_key, ttl, "1")
+    async def guest_join(self, payload: GuestJoinRequest) -> GuestJoinResponse:
+        """Create a shadow user for a guest and issue a JWT."""
+        # 1. Verify room exists and is in waiting state
+        result = await self.db.execute(
+            select(GameSession).where(GameSession.room_code == payload.room_code)
+        )
+        session = result.scalar_one_or_none()
+        if not session:
+            raise HTTPException(status_code=404, detail="Room not found")
+        if session.status.lower() != "waiting":
+            raise HTTPException(
+                status_code=400, 
+                detail=f"Room is already {session.status}. Guests can only join waiting rooms."
+            )
+
+        # 2. Create shadow user
+        guest_uuid = uuid.uuid4()
+        guest_email = f"guest_{guest_uuid}@quizbattle.com"
+        
+        # Ensure username uniqueness (shadow users might have same nicknames)
+        guest_username = payload.nickname
+        username_check = await self.db.execute(select(User).where(User.username == guest_username))
+        if username_check.scalar_one_or_none():
+            guest_username = f"{payload.nickname}_{str(guest_uuid)[:8]}"
+
+        hashed_password = self._hash_password("guest")
+        
+        user = User(
+            email=guest_email,
+            username=guest_username,
+            password=hashed_password,
+        )
+        self.db.add(user)
+        
+        try:
+            await self.db.commit()
+            await self.db.refresh(user)
+        except Exception as e:
+            await self.db.rollback()
+            raise HTTPException(status_code=500, detail="Failed to create guest user")
+
+        # 3. Generate tokens
+        tokens = await self.generate_tokens(user.id, role="guest")
+
+        return GuestJoinResponse(
+            access_token=tokens.access_token,
+            room_code=payload.room_code,
+            user=UserResponse(
+                id=user.id,
+                email=user.email,
+                username=user.username,
+                role="guest"
+            )
+        )
+
+    async def update_user(self, user_id: int, payload: UpdateMeRequest) -> User:
+        """Update user profile details."""
+        # 1. Get user
+        result = await self.db.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # 2. Update username if provided
+        if payload.username and payload.username != user.username:
+            # Check uniqueness
+            existing = await self.db.execute(select(User).where(User.username == payload.username))
+            if existing.scalar_one_or_none():
+                raise HTTPException(status_code=400, detail="Username already taken")
+            user.username = payload.username
+
+        # 3. Update password if both current and new are provided
+        if payload.new_password:
+            if not payload.current_password:
+                raise HTTPException(status_code=400, detail="Current password required to set new password")
+            
+            # Verify current
+            if not bcrypt.checkpw(payload.current_password.encode("utf-8"), user.password.encode("utf-8")):
+                raise HTTPException(status_code=400, detail="Incorrect current password")
+            
+            user.password = self._hash_password(payload.new_password)
+
+        # 4. Update avatar if provided
+        if payload.avatar_url:
+            user.avatar_url = payload.avatar_url
+
+        self.db.add(user)
+        await self.db.commit()
+        await self.db.refresh(user)
+        
+        return user

@@ -3,9 +3,9 @@
 import { useEffect, useState, use } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import Navbar from "../../../components/Navbar";
-import AuthGuard from "../../../components/AuthGuard";
-import { LoadingSpinner } from "../../../components/LoadingSpinner";
+import Navbar from "@/app/components/Navbar";
+import AuthGuard from "@/app/components/AuthGuard";
+import { LoadingSpinner } from "@/app/components/LoadingSpinner";
 import { useWebSocket } from "@/lib/websocket";
 import { useAuthStore } from "@/lib/store";
 import { roomApi } from "@/lib/api";
@@ -13,7 +13,8 @@ import type { RoomAccessResponse } from "@/lib/types";
 
 export default function WaitRoomPage({ params }: { params: Promise<{ code: string }> }) {
   const router = useRouter();
-  const { user } = useAuthStore();
+  const { user, logout } = useAuthStore();
+
   const { code } = use(params);
   const { players, isConnected, sendEvent, disconnect, error: wsError, ws } = useWebSocket(code);
   const [isHost, setIsHost] = useState<boolean>(false);
@@ -100,6 +101,17 @@ export default function WaitRoomPage({ params }: { params: Promise<{ code: strin
   const handleDisconnect = () => {
     setDisconnecting(true);
     disconnect();
+
+    // Clear session for guests when they leave the room
+    if (user?.role === "guest") {
+      if (typeof window !== "undefined") {
+        sessionStorage.removeItem("guest_token");
+        sessionStorage.removeItem("guest_user");
+        sessionStorage.removeItem("guest_room_code");
+      }
+      logout();
+    }
+
     router.push("/join");
   };
 

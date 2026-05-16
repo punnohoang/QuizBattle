@@ -1,46 +1,10 @@
 import Link from "next/link";
+import Navbar from "./components/Navbar";
 
 export default function Home() {
   return (
     <div className="min-h-screen flex flex-col" style={{ background: "var(--background)" }}>
-      {/* Navbar */}
-      <nav className="navbar">
-        <div
-          className="container"
-          style={{ display: "flex", alignItems: "center", justifyContent: "space-between", height: 64 }}
-        >
-          <Link href="/" style={{ textDecoration: "none" }}>
-            <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-              <div
-                style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: 10,
-                  background: "var(--gradient-primary)",
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                  fontSize: "1.1rem",
-                  boxShadow: "var(--shadow-primary)",
-                }}
-              >
-                ⚡
-              </div>
-              <span style={{ fontWeight: 800, fontSize: "1.2rem", color: "var(--primary)" }}>
-                QuizBattle
-              </span>
-            </div>
-          </Link>
-          <div style={{ display: "flex", gap: 10 }}>
-            <Link href="/login" className="btn btn-secondary btn-sm">
-              Sign In
-            </Link>
-            <Link href="/register" className="btn btn-primary btn-sm">
-              Get Started
-            </Link>
-          </div>
-        </div>
-      </nav>
+      <Navbar />
 
       {/* Hero */}
       <div
@@ -103,11 +67,11 @@ export default function Home() {
         </p>
 
         <div style={{ display: "flex", gap: 14, justifyContent: "center", flexWrap: "wrap" }}>
-          <Link href="/register" className="btn btn-primary btn-lg">
-            🚀 Start Playing Free
+          <Link href="/join" className="btn btn-primary btn-lg" style={{ minWidth: 180 }}>
+            🎯 Join Game
           </Link>
-          <Link href="/login" className="btn btn-secondary btn-lg">
-            Sign In
+          <Link href="/register" className="btn btn-secondary btn-lg" style={{ minWidth: 180 }}>
+            🚀 Create Free Account
           </Link>
         </div>
 

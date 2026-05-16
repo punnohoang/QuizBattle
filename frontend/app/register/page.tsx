@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { authApi } from "@/lib/api";
+import { authApi, userApi } from "@/lib/api";
 import { useAuthStore } from "@/lib/store";
 import type { TokenResponse, User } from "@/lib/types";
 
@@ -30,7 +30,7 @@ export default function RegisterPage() {
       localStorage.setItem("access_token", tokens.access_token);
       localStorage.setItem("refresh_token", tokens.refresh_token);
 
-      const { data: user } = await authApi.me() as { data: User };
+      const { data: user } = await userApi.me() as { data: User };
       login(user, tokens.access_token, tokens.refresh_token);
       router.replace("/dashboard");
     } catch (err: unknown) {

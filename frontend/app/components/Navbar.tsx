@@ -29,6 +29,7 @@ export default function Navbar() {
     { href: "/dashboard", label: "My Quizzes", icon: "📚", hideForGuest: true },
     { href: "/dashboard?view=public", label: "Public Quizzes", icon: "🌐", hideForGuest: true },
     { href: "/history", label: "History", icon: "🕘", hideForGuest: true },
+    { href: "/profile", label: "Profile", icon: "👤", hideForGuest: true },
     { href: "/join", label: "Join", icon: "🎯" },
   ].filter(link => !isGuest || !link.hideForGuest);
 
@@ -104,7 +105,8 @@ export default function Navbar() {
               ))}
 
               {/* User pill */}
-              <div
+              <Link 
+                href="/profile"
                 style={{
                   display: "flex",
                   alignItems: "center",
@@ -114,13 +116,23 @@ export default function Navbar() {
                   background: "var(--surface-alt)",
                   border: "1.5px solid var(--border)",
                   marginLeft: 4,
+                  textDecoration: "none",
+                  transition: "all 0.2s"
                 }}
+                onMouseEnter={(e) => (e.currentTarget.style.borderColor = "var(--accent-light)")}
+                onMouseLeave={(e) => (e.currentTarget.style.borderColor = "var(--border)")}
               >
                 <div
                   className="avatar avatar-sm"
-                  style={{ width: 28, height: 28, fontSize: "0.75rem" }}
+                  style={{ 
+                    width: 28, height: 28, fontSize: "0.75rem", overflow: "hidden" 
+                  }}
                 >
-                  {user?.username?.charAt(0).toUpperCase()}
+                  {user?.avatar_url ? (
+                    <img src={user.avatar_url} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+                  ) : (
+                    user?.username?.charAt(0).toUpperCase()
+                  )}
                 </div>
                 <span
                   style={{
@@ -131,7 +143,7 @@ export default function Navbar() {
                 >
                   {user?.username}
                 </span>
-              </div>
+              </Link>
 
               <button
                 onClick={handleLogout}

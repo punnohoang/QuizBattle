@@ -1,3 +1,4 @@
+from typing import Optional
 from pydantic import BaseModel, EmailStr, Field
 
 
@@ -26,6 +27,7 @@ class UserResponse(BaseModel):
     id: int
     email: EmailStr
     username: str
+    avatar_url: Optional[str] = None
     role: str = "user"
 
     class Config:
@@ -41,3 +43,10 @@ class GuestJoinResponse(BaseModel):
     access_token: str
     room_code: str
     user: UserResponse
+
+
+class UpdateMeRequest(BaseModel):
+    username: Optional[str] = Field(None, min_length=3, max_length=50)
+    current_password: Optional[str] = Field(None, min_length=6, max_length=128)
+    new_password: Optional[str] = Field(None, min_length=6, max_length=128)
+    avatar_url: Optional[str] = None

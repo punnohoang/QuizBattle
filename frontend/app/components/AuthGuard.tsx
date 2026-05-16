@@ -26,7 +26,7 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
       } else if (user?.role === "guest") {
         // Block Guest from restricted areas
         const pathname = window.location.pathname;
-        const restrictedPaths = ["/dashboard", "/history", "/quizzes", "/host"];
+        const restrictedPaths = ["/dashboard", "/history", "/quizzes", "/host", "/profile"];
         if (restrictedPaths.some(p => pathname.startsWith(p))) {
            router.replace("/join");
         }

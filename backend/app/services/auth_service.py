@@ -16,7 +16,7 @@ from app.core.cache import (
 )
 from app.core.security import create_access_token, create_refresh_token, verify_token
 from app.models import RefreshToken, User, GameSession
-from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserResponse, GuestJoinRequest, GuestJoinResponse
+from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserResponse, GuestJoinRequest, GuestJoinResponse, UpdateMeRequest
 from app.services.room_service import RoomService
 
 
@@ -220,3 +220,40 @@ class AuthService:
                 role="guest"
             )
         )
+
+    async def update_user(self, user_id: int, payload: UpdateMeRequest) -> User:
+        """Update user profile details."""
+        # 1. Get user
+        result = await self.db.execute(select(User).where(User.id == user_id))
+        user = result.scalar_one_or_none()
+        if not user:
+            raise HTTPException(status_code=404, detail="User not found")
+
+        # 2. Update username if provided
+        if payload.username and payload.username != user.username:
+            # Check uniqueness
+            existing = await self.db.execute(select(User).where(User.username == payload.username))
+            if existing.scalar_one_or_none():
+                raise HTTPException(status_code=400, detail="Username already taken")
+            user.username = payload.username
+
+        # 3. Update password if both current and new are provided
+        if payload.new_password:
+            if not payload.current_password:
+                raise HTTPException(status_code=400, detail="Current password required to set new password")
+            
+            # Verify current
+            if not bcrypt.checkpw(payload.current_password.encode("utf-8"), user.password.encode("utf-8")):
+                raise HTTPException(status_code=400, detail="Incorrect current password")
+            
+            user.password = self._hash_password(payload.new_password)
+
+        # 4. Update avatar if provided
+        if payload.avatar_url:
+            user.avatar_url = payload.avatar_url
+
+        self.db.add(user)
+        await self.db.commit()
+        await self.db.refresh(user)
+        
+        return user

@@ -1,13 +1,17 @@
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status, File, UploadFile
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.cache import get_redis
-from app.core.dependencies import CurrentUser
+from app.core.dependencies import CurrentUser, RealUser
 from app.core.security import REFRESH_TOKEN_EXPIRE_DAYS, ACCESS_TOKEN_EXPIRE_MINUTES
 from app.db import get_db
-from app.schemas.auth import LoginRequest, RefreshRequest, RegisterRequest, TokenResponse, UserResponse, GuestJoinRequest, GuestJoinResponse
+from app.schemas.auth import (
+    LoginRequest, RefreshRequest, RegisterRequest, TokenResponse, 
+    UserResponse, GuestJoinRequest, GuestJoinResponse, UpdateMeRequest
+)
 from app.services.auth_service import AuthService
+from app.services.cloudinary_service import get_cloudinary_service, CloudinaryService
 
 router = APIRouter(prefix="/auth", tags=["auth"])
 
@@ -40,8 +44,8 @@ async def login(
         key="refresh_token",
         value=tokens.refresh_token,
         httponly=True,
-        secure=True,
-        samesite="strict",
+        secure=False,  # Set to False for local dev (HTTP)
+        samesite="lax",
         max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600,
     )
 
@@ -50,8 +54,8 @@ async def login(
         key="access_token",
         value=tokens.access_token,
         httponly=True,
-        secure=True,
-        samesite="strict",
+        secure=False,  # Set to False for local dev (HTTP)
+        samesite="lax",
         max_age=ACCESS_TOKEN_EXPIRE_MINUTES * 60,
     )
 
@@ -74,8 +78,8 @@ async def refresh(
         key="refresh_token",
         value=tokens.refresh_token,
         httponly=True,
-        secure=True,
-        samesite="strict",
+        secure=False,
+        samesite="lax",
         max_age=REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600,
     )
 
@@ -94,19 +98,6 @@ async def logout(
 
     auth_service = AuthService(db, redis)
     await auth_service.logout_user(refresh_token)
-
-
-@router.get("/me", response_model=UserResponse)
-async def get_current_user_info(current_user: CurrentUser):
-    """Get current authenticated user information."""
-    return {
-        "id": current_user.id,
-        "username": current_user.username,
-        "email": current_user.email,
-        "avatar_url": current_user.avatar_url,
-        "is_active": current_user.is_active,
-        "created_at": current_user.created_at,
-    }
 
 
 @router.post("/guest-join", response_model=GuestJoinResponse)

@@ -13,6 +13,9 @@ services:
       DATABASE_URL: postgresql+asyncpg://quizbattle:quizbattle@postgres:5432/quizbattle_db
       REDIS_URL: redis://redis:6379/0
       JWT_SECRET: change_me
+      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME}
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY}
+      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET}
     depends_on:
       postgres:
         condition: service_healthy

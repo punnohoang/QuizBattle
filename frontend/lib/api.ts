@@ -88,9 +88,21 @@ export const authApi = {
   login: (data: { email: string; password: string }) =>
     api.post("/auth/login", data),
   logout: () => api.post("/auth/logout"),
-  me: () => api.get("/auth/me"),
   guestJoin: (data: { nickname: string; room_code: string }) =>
     api.post("/auth/guest-join", data),
+};
+
+export const userApi = {
+  me: () => api.get("/users/me"),
+  updateMe: (data: { username?: string; current_password?: string; new_password?: string; avatar_url?: string }) =>
+    api.patch("/users/me", data),
+  uploadAvatar: (file: File) => {
+    const formData = new FormData();
+    formData.append("file", file);
+    return api.post("/users/avatar", formData, {
+      headers: { "Content-Type": "multipart/form-data" },
+    });
+  },
 };
 
 export const quizApi = {

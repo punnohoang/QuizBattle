@@ -6,7 +6,7 @@ from app.core.cache import get_redis
 from app.core.dependencies import CurrentUser
 from app.core.security import REFRESH_TOKEN_EXPIRE_DAYS, ACCESS_TOKEN_EXPIRE_MINUTES
 from app.db import get_db
-from app.schemas.auth import LoginRequest, RefreshRequest, RegisterRequest, TokenResponse, UserResponse
+from app.schemas.auth import LoginRequest, RefreshRequest, RegisterRequest, TokenResponse, UserResponse, GuestJoinRequest, GuestJoinResponse
 from app.services.auth_service import AuthService
 
 router = APIRouter(prefix="/auth", tags=["auth"])
@@ -107,3 +107,14 @@ async def get_current_user_info(current_user: CurrentUser):
         "is_active": current_user.is_active,
         "created_at": current_user.created_at,
     }
+
+
+@router.post("/guest-join", response_model=GuestJoinResponse)
+async def guest_join(
+    payload: GuestJoinRequest,
+    db: AsyncSession = Depends(get_db),
+    redis: Redis = Depends(get_redis)
+) -> GuestJoinResponse:
+    """Create a guest session and return a JWT."""
+    auth_service = AuthService(db, redis)
+    return await auth_service.guest_join(payload)

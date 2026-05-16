@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useAuthStore } from "../../lib/store";
 
 export default function AuthGuard({ children }: { children: React.ReactNode }) {
-  const { isAuthenticated } = useAuthStore();
+  const { user, isAuthenticated } = useAuthStore();
   const router = useRouter();
   const [mounted, setMounted] = useState(false);
 
@@ -13,13 +13,28 @@ export default function AuthGuard({ children }: { children: React.ReactNode }) {
     setMounted(true);
   }, []);
 
-  useEffect(() => {
-    if (mounted && !isAuthenticated()) {
-      router.replace("/login");
-    }
-  }, [mounted, isAuthenticated, router]);
+  const isGuestAuthenticated = () => {
+    if (typeof window === "undefined") return false;
+    return !!sessionStorage.getItem("guest_token");
+  };
 
-  if (!mounted || !isAuthenticated()) {
+  useEffect(() => {
+    if (mounted) {
+      if (!isAuthenticated() && !isGuestAuthenticated()) {
+        const isRoomPath = window.location.pathname.includes("/room/");
+        router.replace(isRoomPath ? "/join" : "/login");
+      } else if (user?.role === "guest") {
+        // Block Guest from restricted areas
+        const pathname = window.location.pathname;
+        const restrictedPaths = ["/dashboard", "/history", "/quizzes", "/host"];
+        if (restrictedPaths.some(p => pathname.startsWith(p))) {
+           router.replace("/join");
+        }
+      }
+    }
+  }, [mounted, isAuthenticated, user, router]);
+
+  if (!mounted || (!isAuthenticated() && !isGuestAuthenticated())) {
     return (
       <div
         style={{

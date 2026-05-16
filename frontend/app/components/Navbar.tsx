@@ -24,12 +24,13 @@ export default function Navbar() {
     }
   };
 
+  const isGuest = user?.role === "guest";
   const navLinks = [
-    { href: "/dashboard", label: "My Quizzes", icon: "📚" },
-    { href: "/dashboard?view=public", label: "Public Quizzes", icon: "🌐" },
-    { href: "/history", label: "History", icon: "🕘" },
+    { href: "/dashboard", label: "My Quizzes", icon: "📚", hideForGuest: true },
+    { href: "/dashboard?view=public", label: "Public Quizzes", icon: "🌐", hideForGuest: true },
+    { href: "/history", label: "History", icon: "🕘", hideForGuest: true },
     { href: "/join", label: "Join", icon: "🎯" },
-  ];
+  ].filter(link => !isGuest || !link.hideForGuest);
 
   const isLinkActive = (href: string) => {
     if (!href.startsWith("/dashboard")) {
@@ -142,6 +143,9 @@ export default function Navbar() {
             </>
           ) : (
             <>
+              <Link href="/join" className="btn btn-ghost btn-sm" style={{ color: "var(--primary)", fontWeight: 700 }}>
+                🎯 Join Game
+              </Link>
               <Link href="/login" className="btn btn-ghost btn-sm">
                 Sign In
               </Link>

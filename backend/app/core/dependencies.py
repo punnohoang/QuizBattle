@@ -95,8 +95,21 @@ async def get_current_user(
             detail="User account is inactive",
         )
 
+    # Attach role to the user object (runtime only, not in DB)
+    user.role = token_payload.role
     return user
 
 
-# Type alias for cleaner usage
+async def require_real_user(user: Annotated[User, Depends(get_current_user)]) -> User:
+    """Dependency to ensure the current user is a real user (not a guest)."""
+    if hasattr(user, "role") and user.role == "guest":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Guest users are not allowed to perform this action.",
+        )
+    return user
+
+
+# Type aliases for cleaner usage
 CurrentUser = Annotated[User, Depends(get_current_user)]
+RealUser = Annotated[User, Depends(require_real_user)]

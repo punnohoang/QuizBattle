@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.core.dependencies import CurrentUser
+from app.core.dependencies import RealUser
 from app.db import get_db
 from app.schemas.history import PlayedSessionDetailResponse, UserHistoryResponse
 from app.services.history_service import HistoryService
@@ -11,7 +11,7 @@ router = APIRouter(prefix="/history", tags=["history"])
 
 @router.get("/me", response_model=UserHistoryResponse)
 async def get_my_history(
-    current_user: CurrentUser,
+    current_user: RealUser,
     limit: int = Query(5, ge=1, le=50),
     played_page: int = Query(1, ge=1),
     hosted_page: int = Query(1, ge=1),
@@ -24,7 +24,7 @@ async def get_my_history(
 @router.get("/played/{session_id}", response_model=PlayedSessionDetailResponse)
 async def get_played_session_detail(
     session_id: int,
-    current_user: CurrentUser,
+    current_user: RealUser,
     db: AsyncSession = Depends(get_db),
 ) -> PlayedSessionDetailResponse:
     service = HistoryService(db)

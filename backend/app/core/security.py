@@ -8,6 +8,7 @@ from pydantic import BaseModel
 
 class TokenPayload(BaseModel):
     sub: str  # user_id
+    role: str  # "user" or "guest"
     type: str  # "access" or "refresh"
     exp: datetime
     iat: datetime
@@ -19,12 +20,13 @@ ACCESS_TOKEN_EXPIRE_MINUTES = 15
 REFRESH_TOKEN_EXPIRE_DAYS = 7
 
 
-def create_access_token(user_id: int) -> str:
+def create_access_token(user_id: int, role: str = "user") -> str:
     now = datetime.now(timezone.utc)
     expires = now + timedelta(minutes=ACCESS_TOKEN_EXPIRE_MINUTES)
 
     payload = {
         "sub": str(user_id),
+        "role": role,
         "type": "access",
         "exp": expires,
         "iat": now,
@@ -33,12 +35,13 @@ def create_access_token(user_id: int) -> str:
     return jwt.encode(payload, JWT_SECRET, algorithm=JWT_ALGORITHM)
 
 
-def create_refresh_token(user_id: int) -> str:
+def create_refresh_token(user_id: int, role: str = "user") -> str:
     now = datetime.now(timezone.utc)
     expires = now + timedelta(days=REFRESH_TOKEN_EXPIRE_DAYS)
 
     payload = {
         "sub": str(user_id),
+        "role": role,
         "type": "refresh",
         "exp": expires,
         "iat": now,

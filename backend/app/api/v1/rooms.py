@@ -5,7 +5,7 @@ import asyncio
 import json
 
 from app.core.cache import get_redis
-from app.core.dependencies import CurrentUser
+from app.core.dependencies import CurrentUser, RealUser
 from app.db import get_db, AsyncSessionLocal
 from app.schemas.room import RoomAccessResponse, RoomCreateRequest, RoomResponse
 from app.services.room_service import RoomService
@@ -18,7 +18,7 @@ router = APIRouter(prefix="/rooms", tags=["rooms"])
 @router.post("", response_model=RoomResponse, status_code=status.HTTP_201_CREATED)
 async def create_room(
     payload: RoomCreateRequest,
-    current_user: CurrentUser,
+    current_user: RealUser,
     db: AsyncSession = Depends(get_db),
     redis: Redis = Depends(get_redis),
 ) -> RoomResponse:
@@ -42,7 +42,7 @@ async def get_room_access(
 @router.post("/{room_code}/start", status_code=status.HTTP_200_OK)
 async def start_room(
     room_code: str,
-    current_user: CurrentUser,
+    current_user: RealUser,
     db: AsyncSession = Depends(get_db),
     redis: Redis = Depends(get_redis),
 ) -> dict:
@@ -85,7 +85,7 @@ async def start_room(
 @router.post("/{room_code}/start-questions", status_code=status.HTTP_200_OK)
 async def start_question_loop(
     room_code: str,
-    current_user: CurrentUser,
+    current_user: RealUser,
     db: AsyncSession = Depends(get_db),
     redis: Redis = Depends(get_redis),
 ) -> dict:

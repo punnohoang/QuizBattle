@@ -16,15 +16,16 @@ class ConnectionManager:
 
     def __init__(self):
         # room_code -> list of (websocket, user_id) tuples
-        self.active_connections: dict[str, list[tuple[WebSocket, int]]] = {}
+        # user_id can be string for guest tokens
+        self.active_connections: dict[str, list[tuple[WebSocket, str]]] = {}
 
-    async def connect(self, room_code: str, websocket: WebSocket, user_id: int) -> None:
+    async def connect(self, room_code: str, websocket: WebSocket, user_id: str) -> None:
         """Add a new connection to the room (assumes already accepted)."""
         if room_code not in self.active_connections:
             self.active_connections[room_code] = []
         self.active_connections[room_code].append((websocket, user_id))
 
-    def disconnect(self, room_code: str, websocket: WebSocket, user_id: int) -> None:
+    def disconnect(self, room_code: str, websocket: WebSocket, user_id: str) -> None:
         """Remove a connection from the room."""
         if room_code not in self.active_connections:
             return
@@ -42,7 +43,7 @@ class ConnectionManager:
         self,
         room_code: str,
         message: dict,
-        exclude_user_id: int | None = None,
+        exclude_user_id: str | None = None,
     ) -> None:
         """Broadcast a message to all connections in a room."""
         if room_code not in self.active_connections:
@@ -61,7 +62,7 @@ class ConnectionManager:
         for websocket, user_id in disconnected:
             self.disconnect(room_code, websocket, user_id)
 
-    def get_room_participants(self, room_code: str) -> list[int]:
+    def get_room_participants(self, room_code: str) -> list[str]:
         """Get all user IDs in a room."""
         if room_code not in self.active_connections:
             return []
@@ -71,21 +72,20 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
-async def verify_ws_token(token: str) -> int:
+async def verify_ws_token(token: str) -> object:
     """Verify JWT token from WebSocket query param and return user_id."""
     if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Missing token",
         )
-
     payload = verify_token(token, token_type="access")
     if not payload:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or expired token",
         )
-    return int(payload.sub)
+    return payload
 
 
 async def get_room_id_by_code(redis: Redis, room_code: str) -> int | None:
@@ -107,7 +107,7 @@ async def get_username(db: AsyncSession, user_id: int) -> str:
 async def add_player_to_redis(
     redis: Redis,
     room_id: int,
-    user_id: int,
+    user_id: str | int,
     username: str,
 ) -> None:
     """Add player to Redis player list."""
@@ -119,7 +119,7 @@ async def add_player_to_redis(
 async def remove_player_from_redis(
     redis: Redis,
     room_id: int,
-    user_id: int,
+    user_id: str | int,
     username: str,
 ) -> None:
     """Remove player from Redis player list."""

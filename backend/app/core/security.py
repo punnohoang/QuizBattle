@@ -11,12 +11,13 @@ class TokenPayload(BaseModel):
     type: str  # "access" or "refresh"
     exp: datetime
     iat: datetime
+    nickname: Optional[str] = None
 
 # Export constants for backward compatibility if needed in routes
 ACCESS_TOKEN_EXPIRE_MINUTES = settings.ACCESS_TOKEN_EXPIRE_MINUTES
 REFRESH_TOKEN_EXPIRE_DAYS = settings.REFRESH_TOKEN_EXPIRE_DAYS
 
-def create_access_token(user_id: int, role: str = "user") -> str:
+def create_access_token(user_id: int | str, role: str = "user", extra_claims: dict | None = None) -> str:
     now = datetime.now(timezone.utc)
     expires = now + timedelta(minutes=settings.ACCESS_TOKEN_EXPIRE_MINUTES)
 
@@ -28,10 +29,13 @@ def create_access_token(user_id: int, role: str = "user") -> str:
         "iat": now,
     }
 
+    if extra_claims:
+        payload.update(extra_claims)
+
     return jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.ALGORITHM)
 
 
-def create_refresh_token(user_id: int, role: str = "user") -> str:
+def create_refresh_token(user_id: int | str, role: str = "user", extra_claims: dict | None = None) -> str:
     now = datetime.now(timezone.utc)
     expires = now + timedelta(days=settings.REFRESH_TOKEN_EXPIRE_DAYS)
 
@@ -42,6 +46,9 @@ def create_refresh_token(user_id: int, role: str = "user") -> str:
         "exp": expires,
         "iat": now,
     }
+
+    if extra_claims:
+        payload.update(extra_claims)
 
     return jwt.encode(payload, settings.JWT_SECRET, algorithm=settings.ALGORITHM)
 

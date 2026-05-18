@@ -18,6 +18,7 @@ from app.core.security import create_access_token, create_refresh_token, verify_
 from app.models import User, GameSession
 from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserResponse, GuestJoinRequest, GuestJoinResponse, UpdateMeRequest
 from app.services.room_service import RoomService
+from app.core.redis_ops import RoomRedisManager
 
 
 class AuthService:
@@ -171,45 +172,27 @@ class AuthService:
                 status_code=400, 
                 detail=f"Room is already {session.status}. Guests can only join waiting rooms."
             )
+        # 2. Check nickname not already present in room (both Redis active players and DB participants)
+        redis_ops = RoomRedisManager(self.redis)
+        players = await redis_ops.get_all_players(session.id)
+        for p in players:
+            if (p.get("username") or "").lower() == payload.nickname.lower():
+                raise HTTPException(status_code=400, detail="Nickname already taken in this room. Please choose another.")
 
-        # 2. Create shadow user
-        guest_uuid = uuid.uuid4()
-        guest_email = f"guest_{guest_uuid}@quizbattle.com"
-        
-        # Ensure username uniqueness (shadow users might have same nicknames)
-        guest_username = payload.nickname
-        username_check = await self.db.execute(select(User).where(User.username == guest_username))
-        if username_check.scalar_one_or_none():
-            guest_username = f"{payload.nickname}_{str(guest_uuid)[:8]}"
-
-        hashed_password = self._hash_password("guest")
-        
-        user = User(
-            email=guest_email,
-            username=guest_username,
-            password=hashed_password,
-        )
-        self.db.add(user)
-        
-        try:
-            await self.db.commit()
-            await self.db.refresh(user)
-        except Exception as e:
-            await self.db.rollback()
-            raise HTTPException(status_code=500, detail="Failed to create guest user")
-
-        # 3. Generate tokens
-        tokens = await self.generate_tokens(user.id, role="guest")
+        # 3. Create guest token (do NOT persist a user in DB). Embed nickname in token payload.
+        guest_uuid = str(uuid.uuid4())
+        access = create_access_token(guest_uuid, role="guest", extra_claims={"nickname": payload.nickname})
+        refresh = create_refresh_token(guest_uuid, role="guest")
 
         return GuestJoinResponse(
-            access_token=tokens.access_token,
+            access_token=access,
             room_code=payload.room_code,
-            user=UserResponse(
-                id=user.id,
-                email=user.email,
-                username=user.username,
-                role="guest"
-            )
+            user={
+                "id": None,
+                "email": None,
+                "username": payload.nickname,
+                "role": "guest"
+            }
         )
 
     async def update_user(self, user_id: int, payload: UpdateMeRequest) -> User:

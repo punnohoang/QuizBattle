@@ -15,7 +15,7 @@ from app.core.cache import (
     get_token_blacklist_key,
 )
 from app.core.security import create_access_token, create_refresh_token, verify_token
-from app.models import RefreshToken, User, GameSession
+from app.models import User, GameSession
 from app.schemas.auth import LoginRequest, RegisterRequest, TokenResponse, UserResponse, GuestJoinRequest, GuestJoinResponse, UpdateMeRequest
 from app.services.room_service import RoomService
 
@@ -70,18 +70,9 @@ class AuthService:
         return user, new_tokens
 
     async def logout_user(self, refresh_token: str) -> None:
-        """Logout user by blacklisting refresh token."""
+        """Logout user by blacklisting refresh token in Redis."""
         token_payload = self._verify_refresh_token(refresh_token)
         await self._blacklist_token(refresh_token, token_payload)
-
-        # Store in database for persistence
-        token_entry = RefreshToken(
-            token=refresh_token,
-            user_id=int(token_payload.sub),
-            expires_at=token_payload.exp.replace(tzinfo=None),
-        )
-        self.db.add(token_entry)
-        await self.db.commit()
 
     async def _validate_registration_data(self, payload: RegisterRequest) -> None:
         """Validate registration data and check for existing users."""

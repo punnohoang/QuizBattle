@@ -16,7 +16,7 @@ import bcrypt
 from app.db import AsyncSessionLocal, engine, _ensure_quiz_columns
 from app.models import (
     Base, Role, User, RoleUser, Quiz, Question, Option,
-    GameSession, Participant, PlayerAnswer, RefreshToken
+    GameSession, Participant, PlayerAnswer
 )
 
 

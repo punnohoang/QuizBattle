@@ -10,7 +10,6 @@ from .base import Base, ModelConstants
 if TYPE_CHECKING:
     from .quiz import Quiz
     from .game import GameSession, Participant
-    from .auth import RefreshToken
 
 
 class Role(Base):
@@ -96,12 +95,6 @@ class User(Base):
         "Participant",
         back_populates="user",
         lazy="selectin"
-    )
-    refresh_tokens: Mapped[list["RefreshToken"]] = relationship(
-        "RefreshToken",
-        back_populates="user",
-        lazy="selectin",
-        cascade="all, delete-orphan"
     )
 
     @property

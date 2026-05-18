@@ -6,7 +6,7 @@ import AuthGuard from "@/app/components/AuthGuard";
 import { getWsUrl } from "@/lib/api";
 import { GameplayQuestion } from "@/app/components/GameplayQuestion";
 import { useWebSocket } from "@/lib/websocket";
-import { useAuthStore } from "@/lib/store";
+import { useAuthStore, isGuestSession } from "@/lib/store";
 import type { WSEvent, QuestionResponse, WSPlayer } from "@/lib/types";
 
 interface StateRecovery {
@@ -49,7 +49,7 @@ const buildLeaderboardRows = (
 
 export default function PlayRoomPage({ params }: { params: Promise<{ code: string }> }) {
   const router = useRouter();
-  const { user, logout } = useAuthStore();
+  const { user } = useAuthStore();
   const { code } = use(params);
 
   const [phase, setPhase] = useState<GamePhase>("connecting");
@@ -464,13 +464,12 @@ export default function PlayRoomPage({ params }: { params: Promise<{ code: strin
             <div style={{ textAlign: "center", marginTop: 28 }}>
               <button
                 onClick={() => {
-                  if (user?.role === "guest") {
+                  if (isGuestSession()) {
                     if (typeof window !== "undefined") {
                       sessionStorage.removeItem("guest_token");
                       sessionStorage.removeItem("guest_user");
                       sessionStorage.removeItem("guest_room_code");
                     }
-                    logout();
                     router.push("/join");
                   } else {
                     router.push("/dashboard");
@@ -478,7 +477,7 @@ export default function PlayRoomPage({ params }: { params: Promise<{ code: strin
                 }}
                 className="btn btn-primary btn-lg"
               >
-                {user?.role === "guest" ? "Leave Game" : "Back to Dashboard"}
+                {isGuestSession() ? "Leave Game" : "Back to Dashboard"}
               </button>
             </div>
           </div>

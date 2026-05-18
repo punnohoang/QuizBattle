@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { useAuthStore } from "../../lib/store";
+import { useAuthStore, isGuestSession } from "../../lib/store";
 import { authApi } from "../../lib/api";
 
 export default function Navbar() {
@@ -24,7 +24,7 @@ export default function Navbar() {
     }
   };
 
-  const isGuest = user?.role === "guest";
+  const isGuest = isGuestSession();
   const navLinks = [
     { href: "/dashboard", label: "My Quizzes", icon: "📚", hideForGuest: true },
     { href: "/dashboard?view=public", label: "Public Quizzes", icon: "🌐", hideForGuest: true },

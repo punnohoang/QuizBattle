@@ -152,8 +152,9 @@ export default function PlayRoomPage({ params }: { params: Promise<{ code: strin
       if (data.event === "question_time_up") {
         clearTimer();
 
-        if (userId !== null && !answeredUsers.has(userId)) {
-          setAnsweredUsers(prev => new Set([...prev, userId]));
+        const myId = userId !== null ? Number(userId) : null;
+        if (myId !== null && !answeredUsers.has(myId)) {
+          setAnsweredUsers(prev => new Set([...prev, myId]));
           sendEvent({
             event: "submit_answer",
             question_index: questionNum - 1,
@@ -219,9 +220,10 @@ export default function PlayRoomPage({ params }: { params: Promise<{ code: strin
       }
 
       // Track player answered event (broadcast to all players)
+      // NOTE: normalize to Number to avoid string vs number mismatch in Set
       if (data.event === "player_answered") {
         if (data.user_id !== undefined) {
-          setAnsweredUsers(prev => new Set([...prev, data.user_id]));
+          setAnsweredUsers(prev => new Set([...prev, Number(data.user_id)]));
         }
         if (data.leaderboard) {
           setScores(buildLeaderboardRows(data.leaderboard, wsPlayers));
@@ -302,7 +304,9 @@ export default function PlayRoomPage({ params }: { params: Promise<{ code: strin
     // Calculate time taken
     const timeTaken = maxTime - timeLeft;
     
-    setAnsweredUsers(prev => new Set([...prev, userId]));
+    // Normalize to Number — backend sends user_id as string in player_answered,
+    // so we keep the Set<number> consistent to avoid double-counting.
+    setAnsweredUsers(prev => new Set([...prev, Number(userId)]));
 
     sendEvent({ 
       event: "submit_answer", 

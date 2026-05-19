@@ -63,7 +63,7 @@ export default function EditQuizPage({ params }: { params: Promise<{ id: string 
   });
   const [savingQuestion, setSavingQuestion] = useState(false);
 
-  const createQuestionDraft = (questionType: "multiple_choice" | "true_false") => {
+  const createQuestionDraft = (questionType: "multiple_choice" | "true_false"): QuestionCreate => {
     if (questionType === "true_false") {
       return {
         content: "",

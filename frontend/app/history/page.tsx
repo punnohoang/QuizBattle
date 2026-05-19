@@ -438,7 +438,7 @@ function HostedSessionCard({
           <div style={{ display: "grid", gap: 10, marginBottom: 18 }}>
             {session.top_players.map((player, index) => (
               <div
-                key={player.user_id}
+                key={player.user_id ?? player.username}
                 style={{
                   display: "flex",
                   justifyContent: "space-between",

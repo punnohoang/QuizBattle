@@ -56,7 +56,7 @@ class PlayedSessionDetailResponse(PlayedSessionSummaryResponse):
 
 
 class HostedPlayerSummaryResponse(BaseModel):
-    user_id: int
+    user_id: int | None
     username: str
     total_score: int
     correct_answers: int

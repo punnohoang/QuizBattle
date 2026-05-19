@@ -849,7 +849,7 @@ function EditQuiz({ params }: { params: Promise<{ id: string }> }) {
                       value={newQuestion.time_limit || 20}
                       onChange={e => setNewQuestion({ ...newQuestion, time_limit: parseInt(e.target.value) })}
                     >
-                      {[10, 20, 30, 60, 90].map(v => (
+                      {[5, 10, 20, 30, 60, 90].map(v => (
                         <option key={v} value={v}>{v} seconds</option>
                       ))}
                     </select>

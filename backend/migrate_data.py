@@ -138,7 +138,8 @@ async def seed_quizzes(db: AsyncSession, users: dict[str, User]) -> dict[str, Qu
             "user_id": "admin",
             "title": "General Knowledge",
             "description": "Test your knowledge on various topics",
-            "category": "General",
+            "category": "Other",
+            "is_public": True,
             "questions": [
                 {
                     "content": "What is the capital of France?",
@@ -167,10 +168,176 @@ async def seed_quizzes(db: AsyncSession, users: dict[str, User]) -> dict[str, Qu
             ]
         },
         {
+            "user_id": "admin",
+            "title": "Technology & Innovation",
+            "description": "Fascinating questions about computer science and tech pioneers.",
+            "category": "Technology",
+            "is_public": True,
+            "questions": [
+                {
+                    "content": "Who is known as the father of modern computer science?",
+                    "type": "MTC",
+                    "score_type": "normal",
+                    "time_limit": 20,
+                    "options": [
+                        {"content": "Alan Turing", "is_correct": True},
+                        {"content": "Bill Gates", "is_correct": False},
+                        {"content": "Steve Jobs", "is_correct": False},
+                        {"content": "Ada Lovelace", "is_correct": False},
+                    ]
+                },
+                {
+                    "content": "What does CPU stand for?",
+                    "type": "MTC",
+                    "score_type": "normal",
+                    "time_limit": 20,
+                    "options": [
+                        {"content": "Central Processing Unit", "is_correct": True},
+                        {"content": "Central Process Unit", "is_correct": False},
+                        {"content": "Computer Processing Unit", "is_correct": False},
+                        {"content": "Control Processing Unit", "is_correct": False},
+                    ]
+                },
+            ]
+        },
+        {
+            "user_id": "admin",
+            "title": "Geography Master",
+            "description": "Test your geography skills with these world river and lake questions.",
+            "category": "Geography",
+            "is_public": True,
+            "questions": [
+                {
+                    "content": "Which is the longest river in the world?",
+                    "type": "MTC",
+                    "score_type": "normal",
+                    "time_limit": 30,
+                    "options": [
+                        {"content": "Nile", "is_correct": True},
+                        {"content": "Amazon", "is_correct": False},
+                        {"content": "Yangtze", "is_correct": False},
+                        {"content": "Mississippi", "is_correct": False},
+                    ]
+                },
+                {
+                    "content": "Which country has the most natural lakes?",
+                    "type": "MTC",
+                    "score_type": "normal",
+                    "time_limit": 30,
+                    "options": [
+                        {"content": "Canada", "is_correct": True},
+                        {"content": "Brazil", "is_correct": False},
+                        {"content": "Russia", "is_correct": False},
+                        {"content": "United States", "is_correct": False},
+                    ]
+                },
+            ]
+        },
+        {
+            "user_id": "admin",
+            "title": "Sports Trivia",
+            "description": "General sports trivia about soccer and basketball.",
+            "category": "Sports",
+            "is_public": True,
+            "questions": [
+                {
+                    "content": "How many players are on a standard soccer team on the field?",
+                    "type": "MTC",
+                    "score_type": "normal",
+                    "time_limit": 20,
+                    "options": [
+                        {"content": "11", "is_correct": True},
+                        {"content": "10", "is_correct": False},
+                        {"content": "12", "is_correct": False},
+                        {"content": "9", "is_correct": False},
+                    ]
+                },
+                {
+                    "content": "In which sport would you perform a slam dunk?",
+                    "type": "MTC",
+                    "score_type": "normal",
+                    "time_limit": 20,
+                    "options": [
+                        {"content": "Basketball", "is_correct": True},
+                        {"content": "Tennis", "is_correct": False},
+                        {"content": "Volleyball", "is_correct": False},
+                        {"content": "Soccer", "is_correct": False},
+                    ]
+                },
+            ]
+        },
+        {
+            "user_id": "admin",
+            "title": "Pop Music History",
+            "description": "How well do you know the Beatles and the King of Pop?",
+            "category": "Music",
+            "is_public": True,
+            "questions": [
+                {
+                    "content": "Who is known as the 'King of Pop'?",
+                    "type": "MTC",
+                    "score_type": "normal",
+                    "time_limit": 20,
+                    "options": [
+                        {"content": "Michael Jackson", "is_correct": True},
+                        {"content": "Elvis Presley", "is_correct": False},
+                        {"content": "Prince", "is_correct": False},
+                        {"content": "Freddie Mercury", "is_correct": False},
+                    ]
+                },
+                {
+                    "content": "Which British band released the legendary album 'Abbey Road'?",
+                    "type": "MTC",
+                    "score_type": "normal",
+                    "time_limit": 20,
+                    "options": [
+                        {"content": "The Beatles", "is_correct": True},
+                        {"content": "The Rolling Stones", "is_correct": False},
+                        {"content": "Pink Floyd", "is_correct": False},
+                        {"content": "Queen", "is_correct": False},
+                    ]
+                },
+            ]
+        },
+        {
+            "user_id": "admin",
+            "title": "Math Challenge",
+            "description": "Solve these basic math and geometry problems.",
+            "category": "Math",
+            "is_public": True,
+            "questions": [
+                {
+                    "content": "What is the square root of 144?",
+                    "type": "MTC",
+                    "score_type": "normal",
+                    "time_limit": 20,
+                    "options": [
+                        {"content": "12", "is_correct": True},
+                        {"content": "14", "is_correct": False},
+                        {"content": "10", "is_correct": False},
+                        {"content": "16", "is_correct": False},
+                    ]
+                },
+                {
+                    "content": "What is the value of Pi rounded to two decimal places?",
+                    "type": "MTC",
+                    "score_type": "normal",
+                    "time_limit": 20,
+                    "options": [
+                        {"content": "3.14", "is_correct": True},
+                        {"content": "3.12", "is_correct": False},
+                        {"content": "3.16", "is_correct": False},
+                        {"content": "3.18", "is_correct": False},
+                    ]
+                },
+            ]
+        },
+        {
             "user_id": "testuser1",
             "title": "Science Basics",
             "description": "Basic science questions",
             "category": "Science",
+            "is_public": True,
             "questions": [
                 {
                     "content": "What is the chemical symbol for Gold?",
@@ -191,6 +358,7 @@ async def seed_quizzes(db: AsyncSession, users: dict[str, User]) -> dict[str, Qu
             "title": "History Quiz",
             "description": "Historical events and figures",
             "category": "History",
+            "is_public": True,
             "questions": [
                 {
                     "content": "In what year did World War II end?",
@@ -228,7 +396,7 @@ async def seed_quizzes(db: AsyncSession, users: dict[str, User]) -> dict[str, Qu
                 category=quiz_data["category"],
                 question_count=len(quiz_data["questions"]),
                 is_deleted=False,
-                is_public=False,
+                is_public=quiz_data.get("is_public", False),
             )
             db.add(quiz)
             await db.flush()

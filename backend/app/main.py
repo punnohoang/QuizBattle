@@ -27,7 +27,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title=settings.APP_NAME,
     lifespan=lifespan,
-    docs_url="/docs" if settings.APP_ENV != "production" else None,
+    docs_url="/docs",
 )
 
 # Configure CORS

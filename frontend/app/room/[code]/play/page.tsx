@@ -68,6 +68,7 @@ export default function PlayRoomPage({ params }: { params: Promise<{ code: strin
 
   const { lastMessage, sendEvent, players: wsPlayers, userId, isConnected, error: wsError, gameState } = useWebSocket(code);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const lastSyncedQuestionIndex = useRef<number | null>(null);
 
   const clearTimer = () => {
     if (timerRef.current) clearInterval(timerRef.current);
@@ -84,6 +85,13 @@ export default function PlayRoomPage({ params }: { params: Promise<{ code: strin
       setMaxTime(gameState.question.time_limit || 20);
       // Sync time left from shared state
       setTimeLeft(gameState.timeRemaining);
+
+      // Robust reset: Clear answer selection when transitioning to a new question
+      if (lastSyncedQuestionIndex.current !== gameState.questionIndex) {
+        setSelectedOption(null);
+        setAnsweredUsers(new Set());
+        lastSyncedQuestionIndex.current = gameState.questionIndex;
+      }
     }
     if (gameState.countdown !== undefined && gameState.phase === "countdown") {
       setCountdownVal(gameState.countdown);

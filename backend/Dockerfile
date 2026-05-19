@@ -13,4 +13,4 @@ COPY ./migrate_data.py /app/migrate_data.py
 
 EXPOSE 8000
 
-CMD ["sh", "-c", "python /app/migrate_data.py && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"]
+CMD ["sh", "-c", "python /app/migrate_data.py && uvicorn app.main:app --host 0.0.0.0 --port 8000"]

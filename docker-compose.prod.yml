@@ -2,43 +2,38 @@ services:
 
   backend:
     container_name: quizbattle_backend
-    build: ./backend
+    image: ghcr.io/${IMAGE_OWNER_LC}/quizbattle-backend:latest
     ports:
       - "8000:8000"
-    volumes:
-      - ./backend:/app
     environment:
-      APP_ENV: local
+      APP_ENV: production
       API_PREFIX: /api/v1
-      DATABASE_URL: postgresql+asyncpg://quizbattle:quizbattle@postgres:5432/quizbattle_db
+      DATABASE_URL: postgresql+asyncpg://quizbattle:${DB_PASSWORD}@postgres:5432/quizbattle_db
       REDIS_URL: redis://redis:6379/0
-      JWT_SECRET: change_me
+      JWT_SECRET: ${JWT_SECRET}
       CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME}
       CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY}
       CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET}
-    command: sh -c "python /app/migrate_data.py && uvicorn app.main:app --host 0.0.0.0 --port 8000 --reload"
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+    restart: always
 
   frontend:
     container_name: quizbattle_frontend
-    build: ./frontend
+    image: ghcr.io/${IMAGE_OWNER_LC}/quizbattle-frontend:latest
     ports:
       - "3000:3000"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-    command: npm run dev -- --hostname 0.0.0.0
+    restart: always
 
   postgres:
     container_name: quizbattle_postgres
     image: postgres:15
     environment:
       POSTGRES_USER: quizbattle
-      POSTGRES_PASSWORD: quizbattle
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
       POSTGRES_DB: quizbattle_db
     ports:
       - "5432:5432"
@@ -49,6 +44,7 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    restart: always
 
   redis:
     container_name: quizbattle_redis
@@ -62,3 +58,4 @@ services:
       interval: 5s
       timeout: 5s
       retries: 5
+    restart: always

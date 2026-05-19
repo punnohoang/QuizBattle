@@ -4,7 +4,7 @@ import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import Navbar from "../components/Navbar";
-import { authApi } from "@/lib/api";
+import { authApi, roomApi } from "@/lib/api";
 import { useAuthStore } from "@/lib/store";
 
 const ROOM_CODE_LENGTH = 6;
@@ -28,6 +28,7 @@ export default function JoinRoomPage() {
     e.preventDefault();
     const normalizedCode = roomCode.trim().toUpperCase();
     const normalizedNickname = nickname.trim();
+    const hasRealAuth = isAuthenticated() && user;
 
     if (!normalizedNickname) {
       setError("Please enter a nickname.");
@@ -48,19 +49,26 @@ export default function JoinRoomPage() {
     setIsLoading(true);
 
     try {
-      const { data } = await authApi.guestJoin({
-        nickname: normalizedNickname,
-        room_code: normalizedCode,
-      });
+      if (hasRealAuth) {
+        await roomApi.access(normalizedCode);
 
-      if (typeof window !== "undefined") {
-        sessionStorage.setItem("guest_token", data.access_token);
-        sessionStorage.setItem("guest_user", JSON.stringify(data.user));
-        sessionStorage.setItem("guest_room_code", normalizedCode);
+        if (typeof window !== "undefined") {
+          sessionStorage.removeItem("guest_token");
+          sessionStorage.removeItem("guest_user");
+          sessionStorage.removeItem("guest_room_code");
+        }
+      } else {
+        const { data } = await authApi.guestJoin({
+          nickname: normalizedNickname,
+          room_code: normalizedCode,
+        });
+
+        if (typeof window !== "undefined") {
+          sessionStorage.setItem("guest_token", data.access_token);
+          sessionStorage.setItem("guest_user", JSON.stringify(data.user));
+          sessionStorage.setItem("guest_room_code", normalizedCode);
+        }
       }
-
-      // Update AuthStore with guest user info for RBAC
-      useAuthStore.getState().setUser(data.user);
 
       router.push(`/room/${normalizedCode}/wait`);
     } catch (err: any) {

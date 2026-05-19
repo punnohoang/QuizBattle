@@ -177,10 +177,12 @@ class QuizGameEngine:
         # 2. Update the official leaderboard in Redis
         if pending_scores:
             for user_id_str, score_str in pending_scores.items():
-                user_id = int(user_id_str)
-                score = int(score_str)
+                try:
+                    score = int(score_str)
+                except Exception:
+                    continue
                 if score > 0:
-                    await self.state_manager.redis_ops.increment_leaderboard(room_id, user_id, score)
+                    await self.state_manager.redis_ops.increment_leaderboard(room_id, user_id_str, score)
         
         # 3. Clean up pending scores key
         await self.redis.delete(pending_key)
@@ -202,7 +204,7 @@ class QuizGameEngine:
     async def submit_answer(
         self,
         room_id: int,
-        user_id: int,
+        user_id: str | int,
         question_index: int,
         selected_option_ids: list[int],
         time_taken: int,
@@ -311,20 +313,33 @@ class QuizGameEngine:
             self.db.add(session)
 
         for p in players:
-            user_id = int(p.get("user_id"))
+            raw_user_id = p.get("user_id")
             nickname = p.get("username") or ""
+            # Try to interpret user_id as int for real users; guests will remain as string
+            user_id_db = None
+            try:
+                user_id_db = int(raw_user_id)
+            except Exception:
+                user_id_db = None
+
             if session:
-                q = await self.db.execute(select(Participant).where(Participant.session_id == session.id, Participant.user_id == user_id))
-                participant = q.scalar_one_or_none()
-                if not participant:
-                    participant = Participant(session_id=session.id, user_id=user_id, nickname=nickname, total_score=score_map.get(user_id, 0))
+                if user_id_db is not None:
+                    q = await self.db.execute(select(Participant).where(Participant.session_id == session.id, Participant.user_id == user_id_db))
                 else:
-                    participant.total_score = score_map.get(user_id, participant.total_score)
+                    q = await self.db.execute(select(Participant).where(Participant.session_id == session.id, Participant.user_id == None, Participant.nickname == nickname))
+
+                participant = q.scalar_one_or_none()
+                # Score lookup uses string keys from leaderboard, so use raw_user_id
+                participant_score = score_map.get(str(raw_user_id), 0)
+                if not participant:
+                    participant = Participant(session_id=session.id, user_id=user_id_db, nickname=nickname, total_score=participant_score)
+                else:
+                    participant.total_score = participant_score
                 self.db.add(participant)
                 await self.db.flush()
 
             try:
-                buffered = await redis_ops.get_user_answers(room_id, user_id)
+                buffered = await redis_ops.get_user_answers(room_id, raw_user_id)
                 for entry in buffered:
                     try:
                         if isinstance(entry, (bytes, bytearray)): entry = entry.decode("utf-8")
@@ -339,7 +354,7 @@ class QuizGameEngine:
                         )
                         self.db.add(pa)
                     except: continue
-                await redis_ops.clear_user_answers(room_id, user_id)
+                await redis_ops.clear_user_answers(room_id, raw_user_id)
             except: pass
 
         try: await self.db.commit()

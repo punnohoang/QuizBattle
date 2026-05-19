@@ -62,11 +62,12 @@ export const WebSocketProvider: React.FC<{ roomCode: string; children: React.Rea
     }
 
     try {
+      const accessToken = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
       const guestToken = typeof window !== "undefined" ? sessionStorage.getItem("guest_token") : null;
       const guestRoomCode = typeof window !== "undefined" ? sessionStorage.getItem("guest_room_code") : null;
       
-      // Use guest token if it matches the current room code
-      const effectiveToken = (guestRoomCode === roomCode) ? guestToken : undefined;
+      // Prefer the real auth token; only fall back to guest token for guest sessions.
+      const effectiveToken = accessToken || ((guestRoomCode === roomCode) ? guestToken : undefined);
       
       const wsUrl = getWsUrl(roomCode, effectiveToken || undefined);
       const socket = new WebSocket(wsUrl);

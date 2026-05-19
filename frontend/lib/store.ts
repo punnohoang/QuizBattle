@@ -62,3 +62,8 @@ export const useAuthStore = create<AuthState>()(
     }
   )
 );
+
+export const isGuestSession = () => {
+  if (typeof window === "undefined") return false;
+  return !!sessionStorage.getItem("guest_token");
+};

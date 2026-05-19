@@ -123,6 +123,24 @@ class RoomService:
             raise HTTPException(status_code=404, detail="Room not found")
 
         await redis_ops.set_room_host_id(session.id, session.host_id)
+        # Additionally check for duplicate nickname in active players (prevent duplicate join)
+        try:
+            players = await redis_ops.get_all_players(session.id)
+            if players:
+                # Get current user's username from DB
+                from sqlalchemy import select
+                from app.models import User
+                res = await self.db.execute(select(User.username).where(User.id == user_id))
+                username = res.scalar_one_or_none()
+                if username:
+                    for p in players:
+                        existing_name = (p.get("username") or "").lower()
+                        if existing_name == username.lower() and str(p.get("user_id")) != str(user_id):
+                            raise HTTPException(status_code=400, detail="Nickname already taken in this room. Please choose another.")
+        except Exception:
+            # swallow redis/db errors; do not block access
+            pass
+
         return {
             "room_id": session.id,
             "room_code": session.room_code,

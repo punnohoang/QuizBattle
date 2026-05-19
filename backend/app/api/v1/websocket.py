@@ -35,8 +35,8 @@ async def websocket_room(room_code: str, websocket: WebSocket):
         await websocket.accept()
 
         # Verify token
-        user_id = await verify_ws_token(token)
-        logger.info(f"✅ Token verified for user: {user_id}")
+        payload = await verify_ws_token(token)
+        logger.info(f"✅ Token verified for payload: {payload}")
     except HTTPException as e:
         logger.warning(f"❌ Invalid WebSocket token for room {room_code}: {e.detail}")
         try:
@@ -59,10 +59,32 @@ async def websocket_room(room_code: str, websocket: WebSocket):
     try:
         # Create persistent DB session
         db = AsyncSessionLocal()
-        
-        # Get username
-        username = await get_username(db, user_id)
+
+        # Determine whether payload is guest or real user
+        if getattr(payload, "role", None) == "guest":
+            user_id = str(payload.sub)
+            username = getattr(payload, "nickname", "Guest")
+        else:
+            user_id = str(payload.sub)
+            # For real users lookup username in DB
+            username = await get_username(db, int(payload.sub))
+
         state_manager = GameStateManager(redis, db)
+
+        # Check duplicate nickname in Redis (before registering connection)
+        from app.core.redis_ops import RoomRedisManager
+        redis_ops = RoomRedisManager(redis)
+        existing_players = await redis_ops.get_all_players(room_id)
+        for p in existing_players:
+            if (p.get("username") or "").lower() == (username or "").lower() and str(p.get("user_id")) != str(user_id):
+                # Duplicate nickname found - reject connection
+                try:
+                    await websocket.send_json({"event": "error", "detail": "Nickname already taken in this room. Please choose another."})
+                except: pass
+                try:
+                    await websocket.close(code=status.WS_1008_POLICY_VIOLATION)
+                except: pass
+                return
 
         # Register connection (already accepted)
         await manager.connect(room_code, websocket, user_id)
@@ -74,8 +96,7 @@ async def websocket_room(room_code: str, websocket: WebSocket):
             "username": username,
             "room_code": room_code,
         })
-        
-        # Add to Redis
+
         await add_player_to_redis(redis, room_id, user_id, username)
 
         player = {"user_id": user_id, "username": username}

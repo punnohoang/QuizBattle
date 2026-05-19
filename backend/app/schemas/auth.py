@@ -39,10 +39,18 @@ class GuestJoinRequest(BaseModel):
     room_code: str = Field(..., min_length=6, max_length=10)
 
 
+class GuestUser(BaseModel):
+    id: Optional[int] = None
+    email: Optional[EmailStr] = None
+    username: str
+    avatar_url: Optional[str] = None
+    role: str = "guest"
+
+
 class GuestJoinResponse(BaseModel):
     access_token: str
     room_code: str
-    user: UserResponse
+    user: GuestUser
 
 
 class UpdateMeRequest(BaseModel):

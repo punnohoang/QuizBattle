@@ -2,7 +2,8 @@
 
 import Link from "next/link";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { useAuthStore } from "../../lib/store";
+import { useEffect, useState } from "react";
+import { useAuthStore, isGuestSession } from "../../lib/store";
 import { authApi } from "../../lib/api";
 
 export default function Navbar() {
@@ -11,7 +12,15 @@ export default function Navbar() {
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const dashboardView = searchParams.get("view") ?? "my";
-  const logoHref = isAuthenticated() ? "/dashboard" : "/";
+
+  // Mount guard to avoid SSR/client hydration mismatches when reading
+  // browser-only state (localStorage/sessionStorage). Render a stable
+  // unauthenticated fallback on the server and only use auth/guest
+  // checks after mounting on the client.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => setMounted(true), []);
+
+  const logoHref = mounted && isAuthenticated() ? "/dashboard" : "/";
 
   const handleLogout = async () => {
     try {
@@ -24,13 +33,20 @@ export default function Navbar() {
     }
   };
 
-  const isGuest = user?.role === "guest";
-  const navLinks = [
-    { href: "/dashboard", label: "My Quizzes", icon: "📚", hideForGuest: true },
-    { href: "/dashboard?view=public", label: "Public Quizzes", icon: "🌐", hideForGuest: true },
-    { href: "/history", label: "History", icon: "🕘", hideForGuest: true },
-    { href: "/join", label: "Join", icon: "🎯" },
-  ].filter(link => !isGuest || !link.hideForGuest);
+  // Only evaluate guest/session-dependent links after mount so server and
+  // initial client render remain identical.
+  const isGuest = mounted ? isGuestSession() : false;
+  const navLinks = mounted
+    ? [
+        { href: "/dashboard", label: "My Quizzes", icon: "📚", hideForGuest: true },
+        { href: "/dashboard?view=public", label: "Public Quizzes", icon: "🌐", hideForGuest: true },
+        { href: "/history", label: "History", icon: "🕘", hideForGuest: true },
+        { href: "/join", label: "Join", icon: "🎯" },
+      ].filter((link) => !isGuest || !link.hideForGuest)
+    : [
+        // SSR/initial-client stable fallback (matches unauthenticated view)
+        { href: "/join", label: "Join", icon: "🎯" },
+      ];
 
   const isLinkActive = (href: string) => {
     if (!href.startsWith("/dashboard")) {
@@ -86,7 +102,20 @@ export default function Navbar() {
 
         {/* Nav links + auth */}
         <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-          {isAuthenticated() ? (
+          {!mounted ? (
+            // Stable fallback to avoid hydration mismatch: render unauthenticated UI
+            <>
+              <Link href="/join" className="btn btn-ghost btn-sm" style={{ color: "var(--primary)", fontWeight: 700 }}>
+                🎯 Join Game
+              </Link>
+              <Link href="/login" className="btn btn-ghost btn-sm">
+                Sign In
+              </Link>
+              <Link href="/register" className="btn btn-primary btn-sm">
+                Get Started
+              </Link>
+            </>
+          ) : isAuthenticated() ? (
             <>
               {navLinks.map((link) => (
                 <Link

@@ -6,6 +6,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from ..db import get_db
 from ..models import User
+from types import SimpleNamespace
 from .security import verify_token
 from .cache import get_redis, get_token_blacklist_key
 from redis.asyncio import Redis
@@ -81,7 +82,20 @@ async def get_current_user(
             headers={"WWW-Authenticate": "Bearer"},
         )
 
-    # Get user from database
+    # If token indicates a guest user, construct a transient user-like object
+    if getattr(token_payload, "role", None) == "guest":
+        nickname = getattr(token_payload, "nickname", None) or "Guest"
+        guest_id = str(token_payload.sub)
+        user = SimpleNamespace()
+        user.id = guest_id
+        user.username = nickname
+        user.email = None
+        user.avatar_url = None
+        user.is_active = True
+        user.role = "guest"
+        return user
+
+    # Get user from database for real users
     result = await db.execute(select(User).where(User.id == int(token_payload.sub)))
     user = result.scalar_one_or_none()
     if not user:

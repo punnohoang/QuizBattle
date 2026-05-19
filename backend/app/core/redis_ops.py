@@ -100,7 +100,7 @@ class RoomRedisManager:
         for player_data in players:
             try:
                 user_id, username = player_data.split(":", 1)
-                result.append({"user_id": int(user_id), "username": username})
+                result.append({"user_id": user_id, "username": username})
             except ValueError:
                 continue
         return result
@@ -190,7 +190,7 @@ class RoomRedisManager:
         results = await self.redis.zrevrange(key, 0, limit - 1, withscores=True)
         leaderboard = []
         for user_id, score in results:
-            leaderboard.append({"user_id": int(user_id), "score": int(score)})
+            leaderboard.append({"user_id": user_id, "score": int(score)})
         return leaderboard
 
     # ========================================================================

@@ -49,7 +49,7 @@ class GameStateManager:
     async def snapshot_game_state(
         self,
         room_id: int,
-        user_id: int,
+        user_id: str | int,
         quiz_id: int,
         question_index: int,
         question_data: dict,
@@ -153,7 +153,7 @@ class GameStateManager:
         for player_data in players:
             try:
                 user_id, username = player_data.split(":", 1)
-                user_ids.append(int(user_id))
+                user_ids.append(user_id)
             except (ValueError, AttributeError):
                 continue
         

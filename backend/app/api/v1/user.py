@@ -37,8 +37,7 @@ async def upload_avatar(
 ) -> UserResponse:
     """Upload user avatar to Cloudinary."""
     # Upload to Cloudinary
-    upload_result = await cloudinary.upload_image(file)
-    avatar_url = upload_result.get("secure_url")
+    avatar_url = await cloudinary.upload_image(file)
 
     # Update user in DB
     auth_service = AuthService(db, None)

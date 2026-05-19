@@ -1,5 +1,5 @@
 from pydantic_settings import BaseSettings, SettingsConfigDict
-from typing import Optional
+from typing import Optional, Any
 from pydantic import field_validator
 import json
 
@@ -8,15 +8,18 @@ class Settings(BaseSettings):
     APP_NAME: str = "QuizBattle API"
     APP_ENV: str = "local"
     API_PREFIX: str = "/api/v1"
-    ALLOWED_ORIGINS: list[str] = ["http://localhost:3000", "http://127.0.0.1:3000", "http://0.0.0.0:3000"]
+    ALLOWED_ORIGINS: Any = ["http://localhost:3000", "http://127.0.0.1:3000", "http://0.0.0.0:3000"]
     
     @field_validator("ALLOWED_ORIGINS", mode="before")
     @classmethod
-    def assemble_cors_origins(cls, v: str | list[str]) -> list[str]:
-        if isinstance(v, str) and not v.startswith("["):
-            return [i.strip() for i in v.split(",")]
-        elif isinstance(v, str):
-            return json.loads(v)
+    def assemble_cors_origins(cls, v: Any) -> list[str]:
+        if isinstance(v, str):
+            if v.startswith("[") and v.endswith("]"):
+                try:
+                    return json.loads(v)
+                except Exception:
+                    pass
+            return [i.strip() for i in v.split(",") if i.strip()]
         return v
     
     # Security

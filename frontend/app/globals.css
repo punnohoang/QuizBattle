@@ -548,6 +548,7 @@ select {
   color: white;
   font-size: 0.95rem;
   flex-shrink: 0;
+  overflow: hidden;        /* ← clip image to circle */
 }
 
 .avatar-sm {
@@ -1155,28 +1156,60 @@ select {
 
 /* ─── Responsive ─────────────────────────────────── */
 @media (max-width: 768px) {
-  h1 {
-    font-size: 1.75rem;
+  h1 { font-size: 1.65rem; }
+  h2 { font-size: 1.3rem; }
+  h3 { font-size: 1.1rem; }
+
+  .btn { padding: 9px 18px; font-size: 0.875rem; }
+  .btn-lg { padding: 12px 24px; font-size: 1rem; }
+
+  .card { padding: 1rem; }
+  .container { padding: 0 1rem; }
+
+  /* Dashboard: single-column quiz grid on mobile */
+  .quiz-card-grid,
+  [style*="minmax(300px"] {
+    grid-template-columns: 1fr !important;
   }
 
-  h2 {
-    font-size: 1.4rem;
+  /* Gameplay shell: stack vertically */
+  .gameplay-shell {
+    flex-direction: column;
+  }
+  .gameplay-content {
+    max-width: 100% !important;
   }
 
-  h3 {
-    font-size: 1.2rem;
+  /* Leaderboard sidebar hidden by default on mobile (toggled in component) */
+  .gameplay-sidebar {
+    width: 100%;
+    flex-basis: auto;
+    position: static;
+    inset: auto;
+    overflow: visible;
   }
 
-  .btn {
-    padding: 9px 18px;
-    font-size: 0.875rem;
-  }
+  /* Filter chips: smaller */
+  .filter-chip { font-size: 0.78rem; padding: 5px 12px; }
 
-  .card {
-    padding: 1.1rem;
-  }
+  /* Stat cards: smaller padding */
+  .stat-card { padding: 1rem; }
+  .stat-icon { width: 40px; height: 40px; font-size: 1.2rem; }
 
-  .container {
-    padding: 0 1rem;
+  /* Table: make scrollable */
+  table { font-size: 0.85rem; }
+}
+
+/* Extra small phones */
+@media (max-width: 400px) {
+  h1 { font-size: 1.4rem; }
+  .btn-lg { padding: 11px 20px; font-size: 0.95rem; }
+  .container { padding: 0 0.75rem; }
+}
+
+/* Safe area insets for notch phones (iPhone X+) */
+@supports (padding-bottom: env(safe-area-inset-bottom)) {
+  body {
+    padding-bottom: env(safe-area-inset-bottom);
   }
 }

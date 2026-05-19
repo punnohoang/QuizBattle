@@ -50,6 +50,9 @@ function getGridStyle(count: number): React.CSSProperties {
   }
 }
 
+// On mobile we always stack to 1 column (2 cols for 4-option)
+// Done via CSS media query in the <style> block below
+
 function getItemStyle(count: number, index: number): React.CSSProperties {
   if (count === 5) return { gridArea: `opt${index}` };
   return {};
@@ -225,6 +228,24 @@ export function AnswerOptions({
           transition:color 220ms ease;
         }
         .ao-btn.ao-wrong .ao-text { color:rgba(255,255,255,.65) }
+
+        /* ── Mobile overrides ── */
+        @media (max-width: 600px) {
+          /* Force single-column on very small screens regardless of count */
+          .ao-grid { grid-template-columns: 1fr !important; grid-template-areas: none !important; }
+          /* Bigger touch targets */
+          .ao-btn { min-height: 58px; padding: 12px 14px; gap: 12px; }
+          .ao-badge { width: 32px; height: 32px; font-size: .8rem; }
+          .ao-text  { font-size: clamp(.85rem,3.5vw,1rem); }
+          .ao-grid.ao-c2 .ao-btn { min-height: 68px; }
+          /* Remove entry animation delay on mobile for snappier feel */
+          .ao-btn { animation-delay: 0ms !important; }
+        }
+        @media (min-width: 601px) and (max-width: 768px) {
+          /* 2-col grid on tablet for 4+ options */
+          .ao-grid:not(.ao-c2):not(.ao-c3) { grid-template-columns: repeat(2, 1fr) !important; grid-template-areas: none !important; }
+          .ao-btn { min-height: 62px; }
+        }
       `}</style>
 
       <div

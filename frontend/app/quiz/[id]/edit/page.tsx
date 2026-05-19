@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback, use } from "react";
+import { useEffect, useState, useCallback, use, Suspense } from "react";
 import type { FormEvent } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -29,6 +29,21 @@ const getOptionColor = (index: number) => {
 };
 
 export default function EditQuizPage({ params }: { params: Promise<{ id: string }> }) {
+  return (
+    <Suspense fallback={
+      <div style={{ minHeight: "100vh", background: "var(--background)" }}>
+        <Navbar />
+        <div className="container" style={{ paddingTop: 80, display: "flex", justifyContent: "center" }}>
+          <div className="spinner" />
+        </div>
+      </div>
+    }>
+      <EditQuiz params={params} />
+    </Suspense>
+  );
+}
+
+function EditQuiz({ params }: { params: Promise<{ id: string }> }) {
   const router = useRouter();
   const searchParams = useSearchParams();
   const { id } = use(params);

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useCallback } from "react";
+import { useEffect, useState, useCallback, Suspense } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import Navbar from "../components/Navbar";
@@ -39,6 +39,21 @@ const VISIBILITY_STYLES = {
 };
 
 export default function DashboardPage() {
+  return (
+    <Suspense fallback={
+      <div style={{ minHeight: "100vh", background: "var(--background)" }}>
+        <Navbar />
+        <div className="container" style={{ paddingTop: 80, display: "flex", justifyContent: "center" }}>
+          <div className="spinner" />
+        </div>
+      </div>
+    }>
+      <Dashboard />
+    </Suspense>
+  );
+}
+
+function Dashboard() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const viewMode = searchParams.get("view") === "public" ? "public" : "my";

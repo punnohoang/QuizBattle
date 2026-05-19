@@ -2,11 +2,40 @@
 
 import Link from "next/link";
 import { useRouter, usePathname, useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, Suspense } from "react";
 import { useAuthStore, isGuestSession } from "../../lib/store";
 import { authApi } from "../../lib/api";
 
 export default function Navbar() {
+  return (
+    <Suspense fallback={
+      <nav className="navbar" style={{ position: "sticky", top: 0, zIndex: 100 }}>
+        <div
+          className="container"
+          style={{ display: "flex", alignItems: "center", justifyContent: "space-between", height: 60 }}
+        >
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <div
+              style={{
+                width: 34, height: 34, borderRadius: 9,
+                background: "var(--gradient-primary)",
+                display: "flex", alignItems: "center", justifyContent: "center",
+                fontSize: "1rem", boxShadow: "var(--shadow-primary)", flexShrink: 0,
+              }}
+            >⚡</div>
+            <span style={{ fontWeight: 800, fontSize: "1.1rem", color: "var(--primary)", letterSpacing: "-0.01em" }}>
+              QuizBattle
+            </span>
+          </div>
+        </div>
+      </nav>
+    }>
+      <NavbarContent />
+    </Suspense>
+  );
+}
+
+function NavbarContent() {
   const { user, isAuthenticated, logout } = useAuthStore();
   const router = useRouter();
   const pathname = usePathname();

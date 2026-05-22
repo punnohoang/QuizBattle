@@ -5,7 +5,11 @@ const envBaseUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
 const BASE_URL = (() => {
   if (envBaseUrl) return envBaseUrl.replace(/\/$/, "");
   if (typeof window !== "undefined") {
-    return `${window.location.protocol}//${window.location.hostname}:8000`;
+    const hostname = window.location.hostname;
+    if (hostname === "localhost" || hostname === "127.0.0.1") {
+      return `${window.location.protocol}//${hostname}:8000`;
+    }
+    return window.location.origin;
   }
   return "http://localhost:8000";
 })();

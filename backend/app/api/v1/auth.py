@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
+from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status, Request
 
 from app.core.config import settings
 from app.schemas.auth import (
@@ -26,6 +26,7 @@ async def register(
 async def login(
     payload: LoginRequest,
     response: Response,
+    request: Request,
     auth_service: AuthService = Depends(get_auth_service)
 ) -> TokenResponse:
     """Authenticate user and return tokens."""
@@ -33,10 +34,12 @@ async def login(
     tokens = await auth_service.generate_tokens(user.id)
 
     # Set tokens as HttpOnly cookies
+    secure_cookie = request.url.scheme == "https"
+    samesite_value = "none" if secure_cookie and settings.APP_ENV == "production" else "lax"
     cookie_params = {
         "httponly": True,
-        "secure": settings.APP_ENV == "production",
-        "samesite": "lax",
+        "secure": secure_cookie,
+        "samesite": samesite_value,
         "path": "/",
     }
 
@@ -60,6 +63,7 @@ async def login(
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh(
     response: Response,
+    request: Request,
     payload: RefreshRequest | None = None,
     refresh_token: str = Cookie(None),
     auth_service: AuthService = Depends(get_auth_service)
@@ -72,10 +76,12 @@ async def refresh(
 
     user, tokens = await auth_service.refresh_access_token(refresh_token_value)
 
+    secure_cookie = request.url.scheme == "https"
+    samesite_value = "none" if secure_cookie and settings.APP_ENV == "production" else "lax"
     cookie_params = {
         "httponly": True,
-        "secure": settings.APP_ENV == "production",
-        "samesite": "lax",
+        "secure": secure_cookie,
+        "samesite": samesite_value,
         "path": "/",
     }
 
@@ -98,6 +104,7 @@ async def refresh(
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
 async def logout(
     response: Response,
+    request: Request,
     refresh_token: str = Cookie(None),
     auth_service: AuthService = Depends(get_auth_service)
 ) -> None:
@@ -108,9 +115,11 @@ async def logout(
     await auth_service.logout_user(refresh_token)
     
     # Clear cookies
+    secure_cookie = request.url.scheme == "https"
+    samesite_value = "none" if secure_cookie and settings.APP_ENV == "production" else "lax"
     cookie_params = {
-        "secure": settings.APP_ENV == "production",
-        "samesite": "lax",
+        "secure": secure_cookie,
+        "samesite": samesite_value,
         "path": "/",
     }
 

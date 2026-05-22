@@ -2,7 +2,13 @@ import axios, { AxiosHeaders } from "axios";
 import { cleanupLegacyAuthStorage, isGuestSession, useAuthStore } from "./store";
 
 const envBaseUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
-const BASE_URL = (envBaseUrl ? envBaseUrl : "http://localhost:8000").replace(/\/$/, "");
+const BASE_URL = (() => {
+  if (envBaseUrl) return envBaseUrl.replace(/\/$/, "");
+  if (typeof window !== "undefined") {
+    return `${window.location.protocol}//${window.location.hostname}:8000`;
+  }
+  return "http://localhost:8000";
+})();
 
 export const api = axios.create({
   baseURL: `${BASE_URL}/api/v1`,

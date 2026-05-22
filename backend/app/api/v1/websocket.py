@@ -22,7 +22,9 @@ router = APIRouter(tags=["websocket"])
 
 @router.websocket("/{room_code}")
 async def websocket_room(room_code: str, websocket: WebSocket):
-    token = websocket.query_params.get("token")
+    # Real users send access_token via HttpOnly cookie (set during HTTP handshake).
+    # Guests have no cookie — they pass their JWT via ?token= query param instead.
+    token = websocket.cookies.get("access_token") or websocket.query_params.get("token")
     redis = await get_redis()
     user_id = None
     db = None

@@ -62,14 +62,14 @@ export const WebSocketProvider: React.FC<{ roomCode: string; children: React.Rea
     }
 
     try {
-      const accessToken = typeof window !== "undefined" ? localStorage.getItem("access_token") : null;
+      // Real users: no token in URL — the browser sends the access_token HttpOnly
+      // cookie automatically during the WebSocket HTTP upgrade handshake.
+      // Guests: pass their JWT via ?token= since sessionStorage isn't sent automatically.
       const guestToken = typeof window !== "undefined" ? sessionStorage.getItem("guest_token") : null;
       const guestRoomCode = typeof window !== "undefined" ? sessionStorage.getItem("guest_room_code") : null;
-      
-      // Prefer the real auth token; only fall back to guest token for guest sessions.
-      const effectiveToken = accessToken || ((guestRoomCode === roomCode) ? guestToken : undefined);
-      
-      const wsUrl = getWsUrl(roomCode, effectiveToken || undefined);
+      const effectiveGuestToken = (guestRoomCode === roomCode) ? guestToken : undefined;
+
+      const wsUrl = getWsUrl(roomCode, effectiveGuestToken ?? undefined);
       const socket = new WebSocket(wsUrl);
 
       socket.onopen = () => {

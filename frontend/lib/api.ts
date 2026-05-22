@@ -1,21 +1,30 @@
-import axios from "axios";
+import axios, { AxiosHeaders } from "axios";
+import { cleanupLegacyAuthStorage, isGuestSession, useAuthStore } from "./store";
 
-const BASE_URL = (process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000").replace(/\/$/, "");
+const envBaseUrl = process.env.NEXT_PUBLIC_API_URL?.trim();
+const BASE_URL = (envBaseUrl ? envBaseUrl : "http://localhost:8000").replace(/\/$/, "");
 
 export const api = axios.create({
   baseURL: `${BASE_URL}/api/v1`,
   headers: { "Content-Type": "application/json" },
-  withCredentials: true, // send HttpOnly cookies (refresh_token)
+  withCredentials: true, // send HttpOnly cookies automatically
 });
 
-// ─── Request interceptor: attach access token ─────
+// ─── Request interceptor: attach guest bearer token ───
 api.interceptors.request.use((config) => {
   if (typeof window !== "undefined") {
-    const token = localStorage.getItem("access_token") || sessionStorage.getItem("guest_token");
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
+    const guestToken = sessionStorage.getItem("guest_token");
+    const hasRealUser = !!useAuthStore.getState().user;
+
+    if (guestToken && !hasRealUser) {
+      const headers = AxiosHeaders.from(config.headers ?? {});
+      if (!headers.has("Authorization")) {
+        headers.set("Authorization", `Bearer ${guestToken}`);
+        config.headers = headers;
+      }
     }
   }
+
   return config;
 });
 
@@ -26,8 +35,8 @@ let failedQueue: Array<{
   reject: (e: unknown) => void;
 }> = [];
 
-const processQueue = (error: unknown, token: string | null = null) => {
-  failedQueue.forEach((p) => (error ? p.reject(error) : p.resolve(token)));
+const processQueue = (error: unknown) => {
+  failedQueue.forEach((p) => (error ? p.reject(error) : p.resolve(null)));
   failedQueue = [];
 };
 
@@ -36,40 +45,40 @@ api.interceptors.response.use(
   async (error) => {
     const original = error.config;
 
+    const isGuest =
+      typeof window !== "undefined" &&
+      isGuestSession() &&
+      !useAuthStore.getState().user;
+
     if (
       error.response?.status === 401 &&
       !original._retry &&
       !original.url?.includes("/auth/login") &&
-      !original.url?.includes("/auth/refresh")
+      !original.url?.includes("/auth/refresh") &&
+      !original.url?.includes("/users/me")
     ) {
+      if (isGuest) {
+        return Promise.reject(error);
+      }
+
       if (isRefreshing) {
         return new Promise((resolve, reject) =>
           failedQueue.push({ resolve, reject })
-        ).then((token) => {
-          original.headers.Authorization = `Bearer ${token}`;
-          return api(original);
-        });
+        ).then(() => api(original));
       }
 
       original._retry = true;
       isRefreshing = true;
 
       try {
-        const refresh_token = localStorage.getItem("refresh_token");
-        if (!refresh_token) throw new Error("No refresh token");
-
-        const { data } = await api.post("/auth/refresh", {
-          refresh_token,
-        });
-        localStorage.setItem("access_token", data.access_token);
-        localStorage.setItem("refresh_token", data.refresh_token);
-        processQueue(null, data.access_token);
-        original.headers.Authorization = `Bearer ${data.access_token}`;
+        // No body needed — refresh_token is in the HttpOnly cookie
+        await api.post("/auth/refresh");
+        processQueue(null);
         return api(original);
       } catch (e) {
         processQueue(e);
-        localStorage.removeItem("access_token");
-        localStorage.removeItem("refresh_token");
+        useAuthStore.getState().logout();
+        cleanupLegacyAuthStorage();
         if (typeof window !== "undefined") window.location.href = "/login";
         return Promise.reject(e);
       } finally {
@@ -155,14 +164,24 @@ export const historyApi = {
   playedDetail: (sessionId: number) => api.get(`/history/played/${sessionId}`),
 };
 
-export const getWsUrl = (roomCode: string, customToken?: string) => {
-  const token =
-    customToken || (typeof window !== "undefined" ? localStorage.getItem("access_token") : "");
-  
-  // Use the established BASE_URL but switch to ws/wss protocol
+/**
+ * Build a WebSocket URL for a room.
+ *
+ * - Real users: no token in URL — the browser sends the access_token HttpOnly
+ *   cookie automatically during the WebSocket HTTP upgrade handshake.
+ * - Guests: must pass ?token=<guest_token> because sessionStorage values are
+ *   not automatically sent and HttpOnly cookies are not available to guests.
+ */
+export const getWsUrl = (roomCode: string, guestToken?: string) => {
   const wsBase = BASE_URL.replace(/^http/, "ws");
-  
-  const url = `${wsBase}/ws/room/${roomCode}?token=${encodeURIComponent(token || "")}`;
-  console.log("🔗 [API] WS URL:", url.split('?')[0] + "?token=***");
+
+  if (guestToken) {
+    const url = `${wsBase}/ws/room/${roomCode}?token=${encodeURIComponent(guestToken)}`;
+    console.log("🔗 [API] WS URL (guest):", url.split("?")[0] + "?token=***");
+    return url;
+  }
+
+  const url = `${wsBase}/ws/room/${roomCode}`;
+  console.log("🔗 [API] WS URL (auth cookie):", url);
   return url;
 };

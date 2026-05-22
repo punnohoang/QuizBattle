@@ -4,60 +4,55 @@ import type { User } from "./types";
 
 interface AuthState {
   user: User | null;
-  accessToken: string | null;
-  refreshToken: string | null;
   isLoading: boolean;
 
-  login: (user: User, accessToken: string, refreshToken: string) => void;
+  login: (user: User) => void;
   logout: () => void;
   setUser: (user: User) => void;
-  setTokens: (accessToken: string, refreshToken: string) => void;
   isAuthenticated: () => boolean;
 }
+
+export const cleanupLegacyAuthStorage = () => {
+  if (typeof window === "undefined") return;
+  try {
+    localStorage.removeItem("access_token");
+    localStorage.removeItem("refresh_token");
+  } catch {
+    // ignore storage errors
+  }
+};
 
 export const useAuthStore = create<AuthState>()(
   persist(
     (set, get) => ({
       user: null,
-      accessToken: null,
-      refreshToken: null,
       isLoading: false,
 
-      login: (user, accessToken, refreshToken) => {
-        // Also store in localStorage for the axios interceptor
-        if (typeof window !== "undefined") {
-          localStorage.setItem("access_token", accessToken);
-          localStorage.setItem("refresh_token", refreshToken);
-        }
-        set({ user, accessToken, refreshToken });
+      login: (user) => {
+        set({ user });
       },
 
       logout: () => {
-        if (typeof window !== "undefined") {
-          localStorage.removeItem("access_token");
-          localStorage.removeItem("refresh_token");
-        }
-        set({ user: null, accessToken: null, refreshToken: null });
+        cleanupLegacyAuthStorage();
+        set({ user: null });
       },
 
       setUser: (user) => set({ user }),
 
-      setTokens: (accessToken, refreshToken) => {
-        if (typeof window !== "undefined") {
-          localStorage.setItem("access_token", accessToken);
-          localStorage.setItem("refresh_token", refreshToken);
-        }
-        set({ accessToken, refreshToken });
-      },
-
-      isAuthenticated: () => !!get().accessToken && !!get().user,
+      isAuthenticated: () => !!get().user,
     }),
     {
       name: "quizbattle-auth",
+      version: 2,
+      migrate: (persistedState: any) => {
+        if (!persistedState || typeof persistedState !== "object") return persistedState;
+        return { user: persistedState.user ?? null };
+      },
+      onRehydrateStorage: () => () => {
+        cleanupLegacyAuthStorage();
+      },
       partialize: (state) => ({
         user: state.user,
-        accessToken: state.accessToken,
-        refreshToken: state.refreshToken,
       }),
     }
   )

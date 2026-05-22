@@ -12,6 +12,7 @@ from app.core.redis_ops import RoomRedisManager
 from app.models import GameSession, Participant, PlayerAnswer, Option
 from sqlalchemy import select
 from datetime import datetime
+from app.db import AsyncSessionLocal
 
 
 class QuizGameEngine:
@@ -299,66 +300,87 @@ class QuizGameEngine:
     async def finalize_game(self, room_id: int) -> None:
         redis_ops = RoomRedisManager(self.redis)
         players = await redis_ops.get_all_players(room_id)
+        players_map = {str(p.get("user_id")): p.get("username") for p in players}
+
         leaderboard = await redis_ops.get_leaderboard(room_id)
-        score_map = {entry["user_id"]: entry["score"] for entry in leaderboard}
+        score_map = {str(entry["user_id"]): entry["score"] for entry in leaderboard}
 
-        try:
-            result = await self.db.execute(select(GameSession).where(GameSession.id == room_id))
-            session = result.scalar_one_or_none()
-        except: session = None
-
-        if session:
-            session.status = "FINISHED"
-            session.ended_at = datetime.utcnow()
-            self.db.add(session)
-
-        for p in players:
-            raw_user_id = p.get("user_id")
-            nickname = p.get("username") or ""
-            # Try to interpret user_id as int for real users; guests will remain as string
-            user_id_db = None
+        user_info = await redis_ops.get_user_info(room_id)
+        decoded_user_info: dict[str, str] = {}
+        for key, value in (user_info or {}).items():
             try:
-                user_id_db = int(raw_user_id)
+                decoded_key = key.decode("utf-8") if isinstance(key, (bytes, bytearray)) else str(key)
+                decoded_value = value.decode("utf-8") if isinstance(value, (bytes, bytearray)) else str(value)
+                decoded_user_info[decoded_key] = decoded_value
             except Exception:
-                user_id_db = None
+                continue
+
+        all_user_ids = set(decoded_user_info.keys()) | set(score_map.keys()) | set(players_map.keys())
+
+        async with AsyncSessionLocal() as db:
+            try:
+                result = await db.execute(select(GameSession).where(GameSession.id == room_id))
+                session = result.scalar_one_or_none()
+            except Exception:
+                session = None
 
             if session:
-                if user_id_db is not None:
-                    q = await self.db.execute(select(Participant).where(Participant.session_id == session.id, Participant.user_id == user_id_db))
-                else:
-                    q = await self.db.execute(select(Participant).where(Participant.session_id == session.id, Participant.user_id == None, Participant.nickname == nickname))
+                session.status = "FINISHED"
+                session.ended_at = datetime.utcnow()
+                db.add(session)
 
-                participant = q.scalar_one_or_none()
-                # Score lookup uses string keys from leaderboard, so use raw_user_id
-                participant_score = score_map.get(str(raw_user_id), 0)
-                if not participant:
-                    participant = Participant(session_id=session.id, user_id=user_id_db, nickname=nickname, total_score=participant_score)
-                else:
-                    participant.total_score = participant_score
-                self.db.add(participant)
-                await self.db.flush()
+            for raw_user_id in all_user_ids:
+                nickname = decoded_user_info.get(str(raw_user_id)) or players_map.get(str(raw_user_id)) or "Guest"
+                # Try to interpret user_id as int for real users; guests will remain as string
+                user_id_db = None
+                try:
+                    user_id_db = int(raw_user_id)
+                except Exception:
+                    user_id_db = None
+
+                participant = None
+                if session:
+                    if user_id_db is not None:
+                        q = await db.execute(select(Participant).where(Participant.session_id == session.id, Participant.user_id == user_id_db))
+                    else:
+                        q = await db.execute(select(Participant).where(Participant.session_id == session.id, Participant.user_id == None, Participant.nickname == nickname))
+
+                    participant = q.scalar_one_or_none()
+                    # Score lookup uses string keys from leaderboard, so use raw_user_id
+                    participant_score = score_map.get(str(raw_user_id), 0)
+                    if not participant:
+                        participant = Participant(session_id=session.id, user_id=user_id_db, nickname=nickname, total_score=participant_score)
+                    else:
+                        participant.total_score = participant_score
+                    db.add(participant)
+                    await db.flush()
+
+                try:
+                    buffered = await redis_ops.get_user_answers(room_id, raw_user_id)
+                    for entry in buffered:
+                        try:
+                            if isinstance(entry, (bytes, bytearray)):
+                                entry = entry.decode("utf-8")
+                            parsed = json.loads(entry)
+                            pa = PlayerAnswer(
+                                participant_id=participant.id,
+                                question_id=parsed["question_id"],
+                                option_id=parsed.get("option_id"),
+                                response_time=parsed.get("time_taken", 0) * 1000,
+                                score_earned=parsed.get("score_earned", 0),
+                                is_correct=parsed.get("is_correct", False),
+                            )
+                            db.add(pa)
+                        except Exception:
+                            continue
+                    await redis_ops.clear_user_answers(room_id, raw_user_id)
+                except Exception:
+                    pass
 
             try:
-                buffered = await redis_ops.get_user_answers(room_id, raw_user_id)
-                for entry in buffered:
-                    try:
-                        if isinstance(entry, (bytes, bytearray)): entry = entry.decode("utf-8")
-                        parsed = json.loads(entry)
-                        pa = PlayerAnswer(
-                            participant_id=participant.id,
-                            question_id=parsed["question_id"],
-                            option_id=parsed.get("option_id"),
-                            response_time=parsed.get("time_taken", 0) * 1000,
-                            score_earned=parsed.get("score_earned", 0),
-                            is_correct=parsed.get("is_correct", False),
-                        )
-                        self.db.add(pa)
-                    except: continue
-                await redis_ops.clear_user_answers(room_id, raw_user_id)
-            except: pass
-
-        try: await self.db.commit()
-        except: await self.db.rollback()
+                await db.commit()
+            except Exception:
+                await db.rollback()
 
         try:
             await redis_ops.clear_questions(room_id)

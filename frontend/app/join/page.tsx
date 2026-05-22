@@ -83,9 +83,9 @@ export default function JoinRoomPage() {
   };
 
   return (
-    <div 
-      style={{ 
-        minHeight: "100vh", 
+    <div
+      style={{
+        minHeight: "100vh",
         background: "var(--background)",
         backgroundImage: "radial-gradient(circle at 10% 20%, rgba(30, 58, 138, 0.05) 0%, transparent 40%), radial-gradient(circle at 90% 80%, rgba(59, 130, 246, 0.05) 0%, transparent 40%)",
         display: "flex",
@@ -105,9 +105,9 @@ export default function JoinRoomPage() {
       >
         <div style={{ width: "100%", maxWidth: 480 }} className="animate-fadeIn">
           {/* Main Card */}
-          <div 
-            className="glass" 
-            style={{ 
+          <div
+            className="glass"
+            style={{
               padding: "48px 40px",
               background: "rgba(255, 255, 255, 0.8)",
               backdropFilter: "blur(20px)",
@@ -133,9 +133,9 @@ export default function JoinRoomPage() {
 
             <div style={{ position: "relative", zIndex: 1 }}>
               <div style={{ textAlign: "center", marginBottom: "40px" }}>
-                <h1 style={{ 
-                  fontSize: "2.5rem", 
-                  fontWeight: 900, 
+                <h1 style={{
+                  fontSize: "2.5rem",
+                  fontWeight: 900,
                   letterSpacing: "-0.02em",
                   marginBottom: "8px",
                   background: "var(--gradient-primary)",
@@ -148,7 +148,7 @@ export default function JoinRoomPage() {
                   Enter your details to start playing!
                 </p>
               </div>
-              
+
               <form onSubmit={handleJoin} style={{ display: "flex", flexDirection: "column", gap: "24px" }}>
                 <div className="form-group" style={{ marginBottom: 0 }}>
                   <label style={{ fontSize: "0.95rem", fontWeight: 700, marginBottom: "10px", color: "var(--text-primary)" }}>
@@ -161,7 +161,7 @@ export default function JoinRoomPage() {
                       value={nickname}
                       onChange={(e) => setNickname(e.target.value)}
                       placeholder="Your nickname"
-                      style={{ 
+                      style={{
                         paddingLeft: "44px",
                         height: "56px",
                         fontSize: "1rem",
@@ -209,9 +209,9 @@ export default function JoinRoomPage() {
                 </div>
 
                 {error && (
-                  <div 
-                    className="alert alert-error" 
-                    style={{ 
+                  <div
+                    className="alert alert-error"
+                    style={{
                       borderRadius: "14px",
                       padding: "12px 16px",
                       fontSize: "0.9rem",
@@ -225,7 +225,7 @@ export default function JoinRoomPage() {
                 <button
                   type="submit"
                   className="btn btn-primary btn-lg btn-block"
-                  style={{ 
+                  style={{
                     marginTop: 12,
                     height: "60px",
                     fontSize: "1.1rem",
@@ -244,10 +244,10 @@ export default function JoinRoomPage() {
               </form>
 
               <div style={{ marginTop: "32px", textAlign: "center", display: "flex", flexDirection: "column", gap: "12px" }}>
-                <Link 
-                  href="/" 
-                  style={{ 
-                    fontSize: "0.9rem", 
+                <Link
+                  href="/"
+                  style={{
+                    fontSize: "0.9rem",
                     color: "var(--text-secondary)",
                     fontWeight: 600,
                     textDecoration: "none",
@@ -258,7 +258,7 @@ export default function JoinRoomPage() {
                 >
                   ← Go back home
                 </Link>
-                
+
                 {isAuthenticated() && (
                   <div style={{ marginTop: "8px", paddingTop: "20px", borderTop: "1px solid var(--border)" }}>
                     <p style={{ fontSize: "0.85rem", color: "var(--text-muted)", marginBottom: "8px" }}>

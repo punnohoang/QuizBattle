@@ -2,8 +2,9 @@ from fastapi import APIRouter, Cookie, Depends, HTTPException, Response, status
 
 from app.core.config import settings
 from app.schemas.auth import (
-    LoginRequest, RefreshRequest, RegisterRequest, TokenResponse, 
-    UserResponse, GuestJoinRequest, GuestJoinResponse
+    LoginRequest, RegisterRequest, TokenResponse,
+    UserResponse, GuestJoinRequest, GuestJoinResponse,
+    RefreshRequest
 )
 from app.services.auth_service import AuthService
 from app.core.rate_limit import rate_limit
@@ -36,6 +37,7 @@ async def login(
         "httponly": True,
         "secure": settings.APP_ENV == "production",
         "samesite": "lax",
+        "path": "/",
     }
 
     response.set_cookie(
@@ -57,20 +59,37 @@ async def login(
 
 @router.post("/refresh", response_model=TokenResponse)
 async def refresh(
-    payload: RefreshRequest,
     response: Response,
+    payload: RefreshRequest | None = None,
+    refresh_token: str = Cookie(None),
     auth_service: AuthService = Depends(get_auth_service)
 ) -> TokenResponse:
-    """Refresh access token using refresh token."""
-    user, tokens = await auth_service.refresh_access_token(payload.refresh_token)
+    """Refresh access and refresh tokens using the HttpOnly refresh_token cookie."""
+    refresh_token_value = refresh_token or (payload.refresh_token if payload else None)
 
+    if not refresh_token_value:
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Refresh token not provided")
+
+    user, tokens = await auth_service.refresh_access_token(refresh_token_value)
+
+    cookie_params = {
+        "httponly": True,
+        "secure": settings.APP_ENV == "production",
+        "samesite": "lax",
+        "path": "/",
+    }
+
+    response.set_cookie(
+        key="access_token",
+        value=tokens.access_token,
+        max_age=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+        **cookie_params
+    )
     response.set_cookie(
         key="refresh_token",
         value=tokens.refresh_token,
-        httponly=True,
-        secure=settings.APP_ENV == "production",
-        samesite="lax",
         max_age=settings.REFRESH_TOKEN_EXPIRE_DAYS * 24 * 3600,
+        **cookie_params
     )
 
     return tokens
@@ -89,8 +108,14 @@ async def logout(
     await auth_service.logout_user(refresh_token)
     
     # Clear cookies
-    response.delete_cookie("refresh_token")
-    response.delete_cookie("access_token")
+    cookie_params = {
+        "secure": settings.APP_ENV == "production",
+        "samesite": "lax",
+        "path": "/",
+    }
+
+    response.delete_cookie("refresh_token", **cookie_params)
+    response.delete_cookie("access_token", **cookie_params)
 
 
 @router.post("/guest-join", response_model=GuestJoinResponse, dependencies=[Depends(rate_limit(5, 60))])

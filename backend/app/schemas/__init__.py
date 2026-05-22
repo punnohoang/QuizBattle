@@ -2,7 +2,6 @@
 
 from .auth import (
     LoginRequest,
-    RefreshRequest,
     RegisterRequest,
     TokenResponse,
     UserResponse,
@@ -20,7 +19,6 @@ from .room import RoomCreateRequest, RoomResponse
 
 __all__ = [
     "LoginRequest",
-    "RefreshRequest",
     "RegisterRequest",
     "TokenResponse",
     "UserResponse",

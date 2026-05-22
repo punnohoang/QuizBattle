@@ -1,6 +1,6 @@
 from typing import Annotated
 
-from fastapi import Depends, Header, Cookie, HTTPException, status
+from fastapi import Depends, Cookie, HTTPException, status, Header
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -8,78 +8,48 @@ from ..db import get_db
 from ..models import User
 from types import SimpleNamespace
 from .security import verify_token
-from .cache import get_redis, get_token_blacklist_key
+from .cache import get_redis
 from redis.asyncio import Redis
 from ..services.auth_service import AuthService
 
 
+def _extract_bearer_token(authorization: str | None) -> str | None:
+    if not authorization:
+        return None
+    if authorization.lower().startswith("bearer "):
+        token = authorization[7:].strip()
+        return token or None
+    return None
+
+
 async def get_current_user(
-    authorization: str | None = Header(default=None),
     access_token: str | None = Cookie(default=None),
-    refresh_token: str | None = Cookie(default=None),
+    authorization: str | None = Header(default=None),
     db: AsyncSession = Depends(get_db),
     redis: Redis = Depends(get_redis),
 ) -> User:
     """
-    Dependency to extract and verify JWT access token from Authorization header.
+    Dependency to extract and verify JWT access token from the HttpOnly access_token cookie.
     Returns current authenticated user.
-    
+
     Raises:
         HTTPException 401: If token is missing, invalid, or expired
         HTTPException 404: If user not found
     """
-    token = None
+    header_token = _extract_bearer_token(authorization)
+    token = header_token or access_token
 
-    # Prefer Authorization header
-    if authorization:
-        try:
-            scheme, token_value = authorization.split(" ")
-            if scheme.lower() != "bearer":
-                raise ValueError("Invalid authentication scheme")
-            token = token_value
-            token_payload = verify_token(token, token_type="access")
-            if not token_payload:
-                raise HTTPException(
-                    status_code=status.HTTP_401_UNAUTHORIZED,
-                    detail="Invalid or expired access token",
-                    headers={"WWW-Authenticate": "Bearer"},
-                )
-        except ValueError:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid Authorization header format. Use 'Bearer {token}'",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-    # Fallback to access_token cookie
-    elif access_token:
-        token_payload = verify_token(access_token, token_type="access")
-        if not token_payload:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid or expired access token",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-    # If only refresh_token cookie present, validate it (and check blacklist)
-    elif refresh_token:
-        # Check blacklist in Redis
-        blacklisted = await redis.get(get_token_blacklist_key(refresh_token))
-        if blacklisted:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Refresh token revoked",
-            )
-
-        token_payload = verify_token(refresh_token, token_type="refresh")
-        if not token_payload:
-            raise HTTPException(
-                status_code=status.HTTP_401_UNAUTHORIZED,
-                detail="Invalid or expired refresh token",
-            )
-    else:
+    if not token:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Missing Authorization header",
-            headers={"WWW-Authenticate": "Bearer"},
+            detail="Not authenticated",
+        )
+
+    token_payload = verify_token(token, token_type="access")
+    if not token_payload:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or expired access token",
         )
 
     # If token indicates a guest user, construct a transient user-like object

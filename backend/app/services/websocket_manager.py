@@ -114,6 +114,7 @@ async def add_player_to_redis(
     manager_ops = RoomRedisManager(redis)
     player_data = f"{user_id}:{username}"
     await manager_ops.add_player(room_id, player_data)
+    await manager_ops.set_user_info(room_id, user_id=user_id, nickname=username)
 
 
 async def remove_player_from_redis(

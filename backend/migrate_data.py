@@ -8,7 +8,7 @@ import asyncio
 import os
 from datetime import datetime
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
 
 # Import models
@@ -31,6 +31,12 @@ async def create_tables() -> None:
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
         await conn.run_sync(_ensure_quiz_columns)
+        # Ensure guest participants can be stored (user_id nullable)
+        try:
+            await conn.execute(text("ALTER TABLE participants ALTER COLUMN user_id DROP NOT NULL"))
+        except Exception:
+            # Column already nullable or table not yet created
+            pass
     print("✓ Tables created successfully")
 
 

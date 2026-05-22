@@ -5,7 +5,7 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { authApi, userApi } from "@/lib/api";
 import { useAuthStore } from "@/lib/store";
-import type { TokenResponse, User } from "@/lib/types";
+import type { User } from "@/lib/types";
 
 export default function RegisterPage() {
   const router = useRouter();
@@ -22,16 +22,13 @@ export default function RegisterPage() {
 
     try {
       await authApi.register(form);
-      const { data: tokens } = await authApi.login({
+      await authApi.login({
         email: form.email,
         password: form.password,
-      }) as { data: TokenResponse };
-
-      localStorage.setItem("access_token", tokens.access_token);
-      localStorage.setItem("refresh_token", tokens.refresh_token);
+      });
 
       const { data: user } = await userApi.me() as { data: User };
-      login(user, tokens.access_token, tokens.refresh_token);
+      login(user);
       router.replace("/dashboard");
     } catch (err: unknown) {
       const e = err as { response?: { data?: { detail?: string } } };

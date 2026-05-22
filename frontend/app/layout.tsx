@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
 import "./globals.css";
+import AuthInitializer from "./components/AuthInitializer";
 
 export const metadata: Metadata = {
   title: "QuizBattle | Multiplayer Quiz Arena",
@@ -22,7 +23,10 @@ export default function RootLayout({
           rel="stylesheet"
         />
       </head>
-      <body className="min-h-full flex flex-col" suppressHydrationWarning>{children}</body>
+      <body className="min-h-full flex flex-col" suppressHydrationWarning>
+        <AuthInitializer />
+        {children}
+      </body>
     </html>
   );
 }

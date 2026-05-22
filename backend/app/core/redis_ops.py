@@ -32,7 +32,7 @@ class RoomRedisManager:
     # 1. USER INFO (Hash, 1h TTL)
     # ========================================================================
 
-    async def set_user_info(self, room_id: int, user_id: int, nickname: str) -> None:
+    async def set_user_info(self, room_id: int, user_id: str | int, nickname: str) -> None:
         """Store user nickname in room."""
         key = get_user_info_key(room_id)
         await self.redis.hset(key, str(user_id), nickname)

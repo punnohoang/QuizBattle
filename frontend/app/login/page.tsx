@@ -7,6 +7,31 @@ import { authApi, userApi } from "@/lib/api";
 import { useAuthStore } from "@/lib/store";
 import type { User } from "@/lib/types";
 
+function formatApiError(err: unknown, fallback: string) {
+  const e = err as { response?: { data?: any } };
+  const detail = e.response?.data?.detail;
+  if (!detail) return fallback;
+  if (typeof detail === "string") return detail;
+  if (Array.isArray(detail)) {
+    return detail
+      .map((item) => {
+        if (typeof item === "string") return item;
+        if (item?.loc && item?.msg) {
+          const field = Array.isArray(item.loc) ? item.loc[item.loc.length - 1] : item.loc;
+          let msg = item.msg;
+          // Improve email validation feedback
+          if (field === "email" && msg.includes("@-sign")) {
+            msg = "Email must contain an @ symbol (e.g., name@example.com)";
+          }
+          return `${field}: ${msg}`;
+        }
+        return JSON.stringify(item);
+      })
+      .join(" • ");
+  }
+  return typeof detail === "object" ? JSON.stringify(detail) : String(detail);
+}
+
 export default function LoginPage() {
   const router = useRouter();
   const { login } = useAuthStore();
@@ -26,8 +51,7 @@ export default function LoginPage() {
       login(user);
       router.replace("/dashboard");
     } catch (err: unknown) {
-      const e = err as { response?: { data?: { detail?: string } } };
-      setError(e?.response?.data?.detail ?? "Login failed. Please try again.");
+      setError(formatApiError(err, "Login failed. Please try again."));
     } finally {
       setLoading(false);
     }
